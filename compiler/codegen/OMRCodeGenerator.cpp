@@ -2719,7 +2719,7 @@ OMR::CodeGenerator::sizeOfInstructionToBePatchedHCRGuard(TR::Instruction *vgdnop
 
       accumulatedSize += nextI->getBinaryLengthLowerBound();
 
-      if (accumulatedSize > self()->getMaxPatchableInstructionLength())
+      if (accumulatedSize > nextI->getMaxPatchableInstructionLength())
          break;
 
       TR::Node * node = nextI->getNode();
