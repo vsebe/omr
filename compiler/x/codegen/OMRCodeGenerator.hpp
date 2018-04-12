@@ -405,15 +405,6 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
 
    TR_X86ScratchRegisterManager *generateScratchRegisterManager(int32_t capacity=7);
 
-   // Late edge splitting
-   //
-   void addDeferredSplit(TR::X86LabelInstruction *branch){ _deferredSplits.push_front(branch); }
-   int32_t hasDeferredSplits(){ return !_deferredSplits.empty(); }
-   void clearDeferredSplits();
-   void performDeferredSplits();
-   void processDeferredSplits(bool clear);
-   TR::LabelSymbol *splitLabel(TR::LabelSymbol *targetLabel, TR::X86LabelInstruction *instructionToDefer=NULL);
-
    bool supportsConstantRematerialization();
    bool supportsLocalMemoryRematerialization();
    bool supportsStaticMemoryRematerialization();
@@ -530,9 +521,8 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
    void dumpPreGPRegisterAssignment(TR::Instruction *);
    void dumpPostGPRegisterAssignment(TR::Instruction *, TR::Instruction *);
 #endif
-#ifdef DEBUG
+
    void dumpDataSnippets(TR::FILE *pOutFile);
-#endif
 
    TR::IA32ConstantDataSnippet *findOrCreate2ByteConstant(TR::Node *, int16_t c);
    TR::IA32ConstantDataSnippet *findOrCreate4ByteConstant(TR::Node *, int32_t c);
@@ -624,7 +614,6 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
    TR::list<TR::Register*>               _dependentDiscardableRegisters;
    TR::list<TR::ClobberingInstruction*>  _clobberingInstructions;
    std::list<TR::ClobberingInstruction*, TR::typed_allocator<TR::ClobberingInstruction*, TR::Allocator> >::iterator _clobIterator;
-   TR::list<TR::X86LabelInstruction*>    _deferredSplits;
    TR::list<TR_OutlinedInstructions*>   _outlinedInstructionsList;
 
    RegisterAssignmentDirection     _assignmentDirection;

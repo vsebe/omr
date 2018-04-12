@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2017 IBM Corp. and others
+ * Copyright (c) 2016, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -22,16 +22,20 @@
 #include "ddr/ir/Type.hpp"
 
 Type::Type(size_t size)
-	: _sizeOf(size), _isDuplicate(false)
+	: _blacklisted(false)
+	, _name()
+	, _sizeOf(size)
 {
 }
 
-Type::~Type() {}
+Type::~Type()
+{
+}
 
 bool
-Type::isAnonymousType()
+Type::isAnonymousType() const
 {
-	return false;
+	return _name.empty();
 }
 
 string
@@ -40,22 +44,25 @@ Type::getFullName()
 	return _name;
 }
 
-string
-Type::getSymbolKindName()
+const string &
+Type::getSymbolKindName() const
 {
-	return "";
+	static const string typeKind("");
+
+	return typeKind;
 }
 
 DDR_RC
-Type::acceptVisitor(TypeVisitor const &visitor)
+Type::acceptVisitor(const TypeVisitor &visitor)
 {
 	return visitor.visitType(this);
 }
 
-void
-Type::checkDuplicate(Symbol_IR *ir)
+bool
+Type::insertUnique(Symbol_IR *ir)
 {
-	/* No-op: since Types aren't printed, there's no need to check if they're duplicates either */
+	/* No-op: since Types aren't printed, there's no need to check if they're duplicates either. */
+	return false;
 }
 
 NamespaceUDT *
@@ -77,25 +84,19 @@ Type::getArrayDimensions()
 }
 
 void
-Type::computeFieldOffsets()
-{
-	/* No-op: base types have no fields. */
-}
-
-void
 Type::addMacro(Macro *macro)
 {
 	/* No-op: macros cannot be associated with base types. */
 }
 
-std::vector<UDT *> *
+vector<UDT *> *
 Type::getSubUDTS()
 {
 	return NULL;
 }
 
 void
-Type::renameFieldsAndMacros(FieldOverride fieldOverride, Type *replacementType)
+Type::renameFieldsAndMacros(const FieldOverride &fieldOverride, Type *replacementType)
 {
 	/* No-op: base types have no fields. */
 }
@@ -107,56 +108,56 @@ Type::getBaseType()
 }
 
 bool
-Type::operator==(Type const & rhs) const
+Type::operator==(const Type & rhs) const
 {
 	return rhs.compareToType(*this);
 }
 
 bool
-Type::compareToType(Type const &other) const
+Type::compareToType(const Type &other) const
 {
 	return (_name == other._name)
 		&& ((0 == _sizeOf) || (0 == other._sizeOf) || (_sizeOf == other._sizeOf));
 }
 
 bool
-Type::compareToUDT(UDT const &) const
+Type::compareToUDT(const UDT &) const
 {
 	return false;
 }
 
 bool
-Type::compareToNamespace(NamespaceUDT const &) const
+Type::compareToNamespace(const NamespaceUDT &) const
 {
 	return false;
 }
 
 bool
-Type::compareToEnum(EnumUDT const &) const
+Type::compareToEnum(const EnumUDT &) const
 {
 	return false;
 }
 
 bool
-Type::compareToTypedef(TypedefUDT const &) const
+Type::compareToTypedef(const TypedefUDT &) const
 {
 	return false;
 }
 
 bool
-Type::compareToClasstype(ClassType const &) const
+Type::compareToClasstype(const ClassType &) const
 {
 	return false;
 }
 
 bool
-Type::compareToUnion(UnionUDT const &) const
+Type::compareToUnion(const UnionUDT &) const
 {
 	return false;
 }
 
 bool
-Type::compareToClass(ClassUDT const &) const
+Type::compareToClass(const ClassUDT &) const
 {
 	return false;
 }

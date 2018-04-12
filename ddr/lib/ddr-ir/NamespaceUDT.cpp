@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2017 IBM Corp. and others
+ * Copyright (c) 2016, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -23,64 +23,65 @@
 
 NamespaceUDT::NamespaceUDT(unsigned int lineNumber)
 	: UDT(0, lineNumber)
+	, _subUDTs()
+	, _macros()
+	, _enumMembers()
 {
 }
 
 NamespaceUDT::~NamespaceUDT()
 {
-	for (size_t i = 0; i < _subUDTs.size(); i += 1) {
-		delete(_subUDTs[i]);
+	for (vector<EnumMember *>::iterator it = _enumMembers.begin(); it != _enumMembers.end(); ++it) {
+		delete *it;
+	}
+	_enumMembers.clear();
+
+	for (vector<UDT *>::const_iterator it = _subUDTs.begin(); it != _subUDTs.end(); ++it) {
+		delete *it;
 	}
 	_subUDTs.clear();
 }
 
 DDR_RC
-NamespaceUDT::acceptVisitor(TypeVisitor const &visitor)
+NamespaceUDT::acceptVisitor(const TypeVisitor &visitor)
 {
-	return visitor.visitType(this);
+	return visitor.visitNamespace(this);
 }
 
-void
-NamespaceUDT::checkDuplicate(Symbol_IR *ir)
+bool
+NamespaceUDT::insertUnique(Symbol_IR *ir)
 {
-	UDT::checkDuplicate(ir);
-
-	/* Still check the sub UDTs. This is because a previous duplicate of this UDT could have
-	 * contained an empty version of the same sub UDT as this one, which was skipped over due
-	 * to its emptiness.
-	 */
-	for (vector<UDT *>::iterator v = this->_subUDTs.begin(); v != this->_subUDTs.end(); ++v) {
-		(*v)->checkDuplicate(ir);
+	/* Even if this is a duplicate, there may be additions to this namespace. */
+	for (vector<UDT *>::iterator it = _subUDTs.begin(); it != _subUDTs.end();) {
+		if ((*it)->insertUnique(ir)) {
+			++it;
+		} else {
+			it = _subUDTs.erase(it);
+		}
 	}
+	return UDT::insertUnique(ir);
 }
 
-string
-NamespaceUDT::getSymbolKindName()
+const string &
+NamespaceUDT::getSymbolKindName() const
 {
-	return "namespace";
-}
+	static const string namespaceKind("namespace");
 
-void
-NamespaceUDT::computeFieldOffsets()
-{
-	for (vector<UDT *>::iterator it = _subUDTs.begin(); it != _subUDTs.end(); it += 1) {
-		(*it)->computeFieldOffsets();
-	}
+	return namespaceKind;
 }
 
 void
 NamespaceUDT::addMacro(Macro *macro)
 {
-	/* Check if the macro already exists before adding it. */
-	bool alreadyExists = false;
-	for (vector<Macro>::iterator it = _macros.begin(); it != _macros.end(); ++it) {
-		if (macro->_name == it->_name) {
-			alreadyExists = true;
+	/* Add or update a macro: The last of a #define/#undef sequence applies. */
+	for (vector<Macro>::iterator it = _macros.begin();; ++it) {
+		if (_macros.end() == it) {
+			_macros.push_back(*macro);
+			break;
+		} else if (macro->_name == it->_name) {
+			it->setValue(macro->getValue());
 			break;
 		}
-	}
-	if (!alreadyExists) {
-		_macros.push_back(*macro);
 	}
 }
 
@@ -91,28 +92,30 @@ NamespaceUDT::getSubUDTS()
 }
 
 void
-NamespaceUDT::renameFieldsAndMacros(FieldOverride fieldOverride, Type *replacementType)
+NamespaceUDT::renameFieldsAndMacros(const FieldOverride &fieldOverride, Type *replacementType)
 {
+	UDT::renameFieldsAndMacros(fieldOverride, replacementType);
+
 	if (!fieldOverride.isTypeOverride) {
-		for (vector<Macro>::iterator it = _macros.begin(); it != _macros.end(); it += 1) {
+		for (vector<Macro>::iterator it = _macros.begin(); it != _macros.end(); ++it) {
 			if (it->_name == fieldOverride.fieldName) {
 				it->_name = fieldOverride.overrideName;
 			}
 		}
 	}
-	for (vector<UDT *>::iterator it = _subUDTs.begin(); it != _subUDTs.end(); it += 1) {
+	for (vector<UDT *>::iterator it = _subUDTs.begin(); it != _subUDTs.end(); ++it) {
 		(*it)->renameFieldsAndMacros(fieldOverride, replacementType);
-	}		
+	}
 }
 
 bool
-NamespaceUDT::operator==(Type const & rhs) const
+NamespaceUDT::operator==(const Type & rhs) const
 {
 	return rhs.compareToNamespace(*this);
 }
 
 bool
-NamespaceUDT::compareToNamespace(NamespaceUDT const &other) const
+NamespaceUDT::compareToNamespace(const NamespaceUDT &other) const
 {
 	bool subUDTsEqual = _subUDTs.size() == other._subUDTs.size();
 	vector<UDT *>::const_iterator it2 = other._subUDTs.begin();

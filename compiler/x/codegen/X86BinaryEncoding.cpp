@@ -631,40 +631,6 @@ int32_t TR::X86LabelInstruction::estimateBinaryLength(int32_t currentEstimate)
       }
    else if (getOpCodeValue() == LABEL)
       {
-      if (!comp->getOption(TR_DisableLateEdgeSplitting) && _symbol->getVMThreadRestoringLabel() && _symbol->isVMThreadLive())
-         {
-         // If this label is the second of a split pair, and vmThread is live at this label,
-         // then we need a load of the vmThread immediately before this label.
-         // Generate it, and include its size estimate.
-         //
-         TR::Register         *vmThreadVirtualReg = cg()->getVMThreadRegister();
-         TR::RealRegister     *vmThreadRealReg    = cg()->machine()->getX86RealRegister(cg()->getProperties().getMethodMetaDataRegister());
-         if (vmThreadRealReg->getHasBeenAssignedInMethod() || !performTransformation(comp, "O^O LATE EDGE SPLITTING: Skip vmThread reload at %p because ebp was never assigned\n", this)) // TODO: could we use getModified instead?
-            {
-            if (vmThreadVirtualReg->getBackingStorage() == NULL)
-               {
-               // copied from RegisterDependency.cpp
-               vmThreadVirtualReg->setBackingStorage(cg()->allocateVMThreadSpill());
-               cg()->getSpilledIntRegisters().push_front(vmThreadVirtualReg);
-               }
-            // Set spill instruction to the "spill in prolog" value.
-            cg()->setVMThreadSpillInstruction((TR::Instruction *)0xffffffff);
-            if (cg()->getTraceRAOption(TR_TraceRALateEdgeSplitting))
-               traceMsg(comp, "LATE EDGE SPLITTING: Store ebp in prologue\n");
-
-            TR::Instruction *ebpLoad = generateRegMemInstruction(getPrev(), LRegMem(), vmThreadRealReg,
-                                                                  generateX86MemoryReference(vmThreadVirtualReg->getBackingStorage()->getSymbolReference(), cg()), cg());
-            currentEstimate = ebpLoad->estimateBinaryLength(currentEstimate);
-            if (cg()->getTraceRAOption(TR_TraceRALateEdgeSplitting))
-               traceMsg(comp, "LATE EDGE SPLITTING: Added vmThread rematerialization %s before label %s\n",
-                  cg()->getDebug()->getName(ebpLoad),
-                  cg()->getDebug()->getName(_symbol));
-
-            TR::Instruction *bump = cg()->generateDebugCounter(ebpLoad, "cg.lateSplitEdges:reloaded", 1, TR::DebugCounter::Expensive);
-            if (bump != ebpLoad)
-               currentEstimate = bump->estimateBinaryLength(currentEstimate);
-            }
-         }
       getLabelSymbol()->setEstimatedCodeLocation(currentEstimate);
       }
    else // assume absolute code reference
@@ -728,50 +694,6 @@ uint8_t *TR::X86FenceInstruction::generateBinaryEncoding()
    return instructionStart;
    }
 
-
-// -----------------------------------------------------------------------------
-// TR::X86RestoreVMThreadInstruction:: member functions
-
-int32_t TR::X86RestoreVMThreadInstruction::estimateBinaryLength(int32_t currentEstimate)
-   {
-   if (TR::Compiler->target.is64Bit())
-      setEstimatedBinaryLength(9);
-   else
-      setEstimatedBinaryLength(7);
-   return currentEstimate + getEstimatedBinaryLength();
-   }
-
-uint8_t TR::X86RestoreVMThreadInstruction::getBinaryLengthLowerBound()
-   {
-   if (TR::Compiler->target.is64Bit())
-      return 9;
-   else
-      return 7;
-   }
-
-uint8_t *TR::X86RestoreVMThreadInstruction::generateBinaryEncoding()
-   {
-   uint8_t *instructionStart = cg()->getBinaryBufferCursor();
-   uint8_t *cursor           = instructionStart;
-
-   if (TR::Compiler->target.is64Bit())
-      {
-      // mov  rbp,qword ptr fs:[00000000h] ; 64 48 8B 2C 25 00 00 00 00
-      *cursor++ = 0x64; *cursor++ = 0x48; *cursor++ = 0x8b; *cursor++ = 0x2c; *cursor++ = 0x25;
-      *cursor++ = 0x00; *cursor++ = 0x00; *cursor++ = 0x00; *cursor++ = 0x00;
-      }
-   else
-      {
-      // mov ebp,dword ptr fs:[0] ; 64 8b 2d 00 00 00 00
-      *cursor++ = 0x64; *cursor++ = 0x8b; *cursor++ = 0x2d;
-      *cursor++ = 0x00; *cursor++ = 0x00; *cursor++ = 0x00; *cursor++ = 0x00;
-      }
-
-   setBinaryLength(cursor - instructionStart);
-   setBinaryEncoding(instructionStart);
-   cg()->addAccumulatedInstructionLengthError(getEstimatedBinaryLength() - getBinaryLength());
-   return cursor;
-   }
 
 #ifdef J9_PROJECT_SPECIFIC
 // -----------------------------------------------------------------------------
@@ -953,7 +875,7 @@ TR::X86ImmInstruction::addMetaDataForCodeAddress(uint8_t *cursor)
                   __FILE__, __LINE__, getNode());
                break;
             case TR_MethodPointer:
-               if (getNode() && getNode()->getInlinedSiteIndex() == -1 && 
+               if (getNode() && getNode()->getInlinedSiteIndex() == -1 &&
                   (void *)(uintptr_t) getSourceImmediate() == cg()->comp()->getCurrentMethod()->resolvedMethodAddress())
                   setReloKind(TR_RamMethod);
                // intentional fall-through
@@ -964,8 +886,8 @@ TR::X86ImmInstruction::addMetaDataForCodeAddress(uint8_t *cursor)
                                                                            (uint8_t*)getNode(),
                                                                            (TR_ExternalRelocationTargetKind) _reloKind,
                                                                            cg()),
-                  __FILE__, 
-                  __LINE__, 
+                  __FILE__,
+                  __LINE__,
                   getNode());
                   break;
             default:

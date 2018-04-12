@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2016 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -65,10 +65,6 @@ bool
 MM_GCExtensionsBase::initialize(MM_EnvironmentBase* env)
 {
 	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-	uint64_t physicalMemory = 0;
-	uint64_t memoryLimit = 0;
-	uint64_t usableMemory = 0;
-	uint64_t memoryToRequest = 0;
 	uintptr_t *pageSizes = NULL;
 	uintptr_t *pageFlags = NULL;
 
@@ -93,7 +89,7 @@ MM_GCExtensionsBase::initialize(MM_EnvironmentBase* env)
 	if (!rememberedSet.initialize(env, OMR::GC::AllocationCategory::REMEMBERED_SET)) {
 		goto failed;
 	}
-	rememberedSet.setGrowSize(J9_SCV_REMSET_SIZE);
+	rememberedSet.setGrowSize(OMR_SCV_REMSET_SIZE);
 #endif /* OMR_GC_MODRON_SCAVENGER */
 
 #if defined(J9MODRON_USE_CUSTOM_SPINLOCKS)
@@ -106,41 +102,10 @@ MM_GCExtensionsBase::initialize(MM_EnvironmentBase* env)
 	excessiveGCStats.endGCTimeStamp = omrtime_hires_clock();
 	excessiveGCStats.lastEndGlobalGCTimeStamp = excessiveGCStats.endGCTimeStamp;
 
-	/* Set Xmx (heap default).  For most platforms the heap default is a fraction of
-	 * the available physical memory, bounded by the build specs.
-	 *
-	 * 	Windows: half the REAL memory; with a min of 16MiB and a max of 2GiB.
-	 *
-	 * Linux, AIX, and z/OS:  half of OMR_MIN(physical memory, RLIMIT_AS) with a min of
-	 * 16 MiB and a max of 512 MiB.
-	 * -note that RLIMIT_AS is as extracted from getrlimit and represents the resouce
-	 * limitation on address space.
-	 */
 
-	/* Initial physicalMemory as per system call. */
-	physicalMemory = omrsysinfo_get_physical_memory();
-	if (OMRPORT_LIMIT_LIMITED == omrsysinfo_get_limit(OMRPORT_RESOURCE_ADDRESS_SPACE, &memoryLimit)) {
-		/* there is a limit on the memory we can use so take the minimum of this usable amount and the physical memory */
-		usableMemory = OMR_MIN(memoryLimit, physicalMemory);
-	} else {
-		/* if there is no memory limit being imposed on us, we will use physical memory as our max */
-		usableMemory = physicalMemory;
-	}
-	/* we are going to try to request a slice of half the usable memory */
-	memoryToRequest = (usableMemory / 2);
+	computeDefaultMaxHeap(env);
 
-	/* TODO: Only cap HRT to 64M heap.  Should this be removed? */
-#define J9_PHYSICAL_MEMORY_MAX (uint64_t)(512 * 1024 * 1024)
-#define J9_PHYSICAL_MEMORY_DEFAULT (16 * 1024 * 1024)
-
-	if (0 == memoryToRequest) {
-		memoryToRequest = J9_PHYSICAL_MEMORY_DEFAULT;
-	}
-	memoryToRequest = OMR_MIN(memoryToRequest, J9_PHYSICAL_MEMORY_MAX);
-
-	/* Initialize Xmx, Xmdx */
-	memoryMax = MM_Math::roundToFloor(heapAlignment, (uintptr_t)memoryToRequest);
-	maxSizeDefaultMemorySpace = MM_Math::roundToFloor(heapAlignment, (uintptr_t)memoryToRequest);
+	maxSizeDefaultMemorySpace = memoryMax;
 
 	/* Set preferred page size/page flags for Heap and GC Metadata */
 	pageSizes = omrvmem_supported_page_sizes();
@@ -212,8 +177,11 @@ MM_GCExtensionsBase::initialize(MM_EnvironmentBase* env)
 	}
 
 #if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
-	if (!scavengerHotFieldStats.initialize(env)) {
-		goto failed;
+	if(scavengerTraceHotFields) {
+		scavengerHotFieldStats = MM_ScavengerHotFieldStats::newInstance(this);
+		if (NULL == scavengerHotFieldStats) {
+			goto failed;
+		}
 	}
 #endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
 
@@ -244,7 +212,10 @@ void
 MM_GCExtensionsBase::tearDown(MM_EnvironmentBase* env)
 {
 #if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
-	scavengerHotFieldStats.tearDown(env);
+	if (NULL != scavengerHotFieldStats) {
+		scavengerHotFieldStats->kill(this);
+		scavengerHotFieldStats = NULL;
+	}
 #endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
 
 #if defined(OMR_GC_MODRON_SCAVENGER)
@@ -310,4 +281,33 @@ void
 MM_GCExtensionsBase::identityHashDataRemoveRange(MM_EnvironmentBase* env, MM_MemorySubSpace* subspace, uintptr_t size, void* lowAddress, void* highAddress)
 {
 	/* empty */
+}
+
+/* Set Xmx (heap default). For most platforms the heap default is a fraction of
+ * the usable physical memory - half of usable memory with a min of 16 MiB and a max of 512 MiB.
+ */
+void
+MM_GCExtensionsBase::computeDefaultMaxHeap(MM_EnvironmentBase* env)
+{
+	uint64_t usableMemory = 0;
+	uint64_t memoryToRequest = 0;
+
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+
+	/* Initial memory as returned by port library API. */
+	usableMemory = omrsysinfo_get_addressable_physical_memory();
+
+	/* we are going to try to request a slice of half the usable memory */
+	memoryToRequest = (usableMemory / 2);
+
+#define J9_PHYSICAL_MEMORY_MAX (uint64_t)(512 * 1024 * 1024)
+#define J9_PHYSICAL_MEMORY_DEFAULT (16 * 1024 * 1024)
+
+	if (0 == memoryToRequest) {
+		memoryToRequest = J9_PHYSICAL_MEMORY_DEFAULT;
+	}
+	memoryToRequest = OMR_MIN(memoryToRequest, J9_PHYSICAL_MEMORY_MAX);
+
+	/* Initialize Xmx, Xmdx */
+	memoryMax = MM_Math::roundToFloor(heapAlignment, (uintptr_t)memoryToRequest);
 }

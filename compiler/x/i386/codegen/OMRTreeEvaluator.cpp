@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -214,10 +214,6 @@ void OMR::X86::I386::TreeEvaluator::compareLongsForOrder(
       TR::LabelSymbol *destinationLabel = node->getBranchDestination()->getNode()->getLabel();
       List<TR::Register> popRegisters(cg->trMemory());
 
-      bool needVMThreadDep =
-         comp->getOption(TR_DisableLateEdgeSplitting) ||
-         !performTransformation(comp, "O^O LATE EDGE SPLITTING: Omit ebp dependency for %s node %s\n", node->getOpCode().getName(), cg->getDebug()->getName(node));
-
       startLabel->setStartInternalControlFlow();
       doneLabel->setEndInternalControlFlow();
       generateLabelInstruction(LABEL, node, startLabel, cg);
@@ -229,17 +225,11 @@ void OMR::X86::I386::TreeEvaluator::compareLongsForOrder(
          {
          TR::Node *third = node->getChild(2);
          cg->evaluate(third);
-         deps = generateRegisterDependencyConditions(third, cg, 3, &popRegisters);
+         deps = generateRegisterDependencyConditions(third, cg, 2, &popRegisters);
          deps->addPostCondition(cmpRegister->getHighOrder(), TR::RealRegister::NoReg, cg);
          deps->addPostCondition(cmpRegister->getLowOrder(), TR::RealRegister::NoReg, cg);
-         if (needVMThreadDep && cg->getLinkage()->getProperties().getMethodMetaDataRegister() != TR::RealRegister::NoReg)
-            {
-            deps->addPostCondition(cg->getVMThreadRegister(),
-                                   (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
-            }
          deps->stopAddingConditions();
 
-         cg->setVMThreadRequired(true);
          generateLabelInstruction(highOrderBranchOp, node, destinationLabel, deps, cg);
          generateLabelInstruction(JNE4, node, doneLabel, deps, cg);
          compareGPRegisterToImmediate(node, cmpRegister->getLowOrder(), lowValue, cg);
@@ -247,19 +237,13 @@ void OMR::X86::I386::TreeEvaluator::compareLongsForOrder(
          }
       else
          {
-         cg->setVMThreadRequired(true);
          generateLabelInstruction(highOrderBranchOp, node, destinationLabel, cg);
          generateLabelInstruction(JNE4, node, doneLabel, cg);
          compareGPRegisterToImmediate(node, cmpRegister->getLowOrder(), lowValue, cg);
          generateLabelInstruction(lowOrderBranchOp, node, destinationLabel, cg);
-         deps = generateRegisterDependencyConditions((uint8_t)0, 3, cg);
+         deps = generateRegisterDependencyConditions((uint8_t)0, 2, cg);
          deps->addPostCondition(cmpRegister->getHighOrder(), TR::RealRegister::NoReg, cg);
          deps->addPostCondition(cmpRegister->getLowOrder(), TR::RealRegister::NoReg, cg);
-         if (needVMThreadDep && cg->getLinkage()->getProperties().getMethodMetaDataRegister() != TR::RealRegister::NoReg)
-            {
-            deps->addPostCondition(cg->getVMThreadRegister(),
-                                   (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
-            }
          deps->stopAddingConditions();
          }
 
@@ -280,7 +264,6 @@ void OMR::X86::I386::TreeEvaluator::compareLongsForOrder(
 
       cg->decReferenceCount(firstChild);
       cg->decReferenceCount(secondChild);
-      cg->setVMThreadRequired(false);
       }
    else
       {
@@ -616,23 +599,14 @@ TR::Register *OMR::X86::I386::TreeEvaluator::integerPairReturnEvaluator(TR::Node
    TR::RealRegister::RegNum machineHighReturnRegister =
       linkageProperties.getLongHighReturnRegister();
 
-   TR::RegisterDependencyConditions  *dependencies;
+   TR::RegisterDependencyConditions *dependencies = NULL;
    if (machineLowReturnRegister != TR::RealRegister::NoReg)
       {
       dependencies = generateRegisterDependencyConditions((uint8_t)3, 0, cg);
       dependencies->addPreCondition(lowRegister, machineLowReturnRegister, cg);
       dependencies->addPreCondition(highRegister, machineHighReturnRegister, cg);
+      dependencies->stopAddingConditions();
       }
-   else
-      {
-      dependencies = generateRegisterDependencyConditions((uint8_t)1, 0, cg);
-      }
-
-   if (cg->getLinkage()->getProperties().getMethodMetaDataRegister() != TR::RealRegister::NoReg)
-      {
-      dependencies->addPreCondition(cg->getVMThreadRegister(), (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
-      }
-   dependencies->stopAddingConditions();
 
    if (linkageProperties.getCallerCleanup())
       {
@@ -3345,9 +3319,7 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpeqEvaluator(TR::Node *node, T
       TR::Register                         *cmpRegister = NULL;
       TR::RegisterDependencyConditions  *deps        = NULL;
 
-      bool needVMThreadDep =
-         comp->getOption(TR_DisableLateEdgeSplitting) ||
-         !performTransformation(comp, "O^O LATE EDGE SPLITTING: Omit ebp dependency for %s node %s\n", node->getOpCode().getName(), cg->getDebug()->getName(node));
+      bool needVMThreadDep = true;
 
       if ((lowValue | highValue) == 0)
          {
@@ -3397,9 +3369,7 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpeqEvaluator(TR::Node *node, T
             generateRegRegInstruction(OR4RegReg, node, targetRegister, cmpRegister->getHighOrder(), cg);
             }
 
-         cg->setVMThreadRequired(true);
          generateConditionalJumpInstruction(JE4, node, cg, needVMThreadDep);
-         cg->setVMThreadRequired(false);
 
          if (targetNeedsToBeExplicitlyStopped)
             {
@@ -3418,7 +3388,6 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpeqEvaluator(TR::Node *node, T
          cmpRegister = cg->evaluate(firstChild);
          generateLabelInstruction(LABEL, node, startLabel, cg);
          compareGPRegisterToConstantForEquality(node, lowValue, cmpRegister->getLowOrder(), cg);
-         cg->setVMThreadRequired(true);
 
          // Evaluate the global register dependencies and emit the branches by hand;
          // we cannot call generateConditionalJumpInstruction() here because we need
@@ -3429,10 +3398,8 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpeqEvaluator(TR::Node *node, T
             {
             TR::Node *third = node->getChild(2);
             cg->evaluate(third);
-            deps = generateRegisterDependencyConditions(third, cg, 3, &popRegisters);
+            deps = generateRegisterDependencyConditions(third, cg, 2, &popRegisters);
             deps->setMayNeedToPopFPRegisters(true);
-            if (needVMThreadDep)
-               deps->addPostCondition(cg->getVMThreadRegister(), (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
             deps->addPostCondition(cmpRegister->getLowOrder(), TR::RealRegister::NoReg, cg);
             deps->addPostCondition(cmpRegister->getHighOrder(), TR::RealRegister::NoReg, cg);
             deps->stopAddingConditions();
@@ -3446,15 +3413,12 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpeqEvaluator(TR::Node *node, T
             generateLabelInstruction(JNE4, node, doneLabel, needVMThreadDep, cg);
             compareGPRegisterToConstantForEquality(node, highValue, cmpRegister->getHighOrder(), cg);
             generateLabelInstruction(JE4, node, destinationLabel, needVMThreadDep, cg);
-            deps = generateRegisterDependencyConditions((uint8_t)0, needVMThreadDep?3:2, cg);
+            deps = generateRegisterDependencyConditions((uint8_t)0, 2, cg);
             deps->addPostCondition(cmpRegister->getLowOrder(), TR::RealRegister::NoReg, cg);
             deps->addPostCondition(cmpRegister->getHighOrder(), TR::RealRegister::NoReg, cg);
-            if (needVMThreadDep)
-               deps->addPostCondition(cg->getVMThreadRegister(), (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
             }
 
          generateLabelInstruction(LABEL, node, doneLabel, deps, cg);
-         cg->setVMThreadRequired(false);
 
          if (!popRegisters.isEmpty())
             {
@@ -3494,9 +3458,7 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpneEvaluator(TR::Node *node, T
       TR::Register                         *cmpRegister = NULL;
       TR::RegisterDependencyConditions  *deps        = NULL;
 
-      bool needVMThreadDep =
-         comp->getOption(TR_DisableLateEdgeSplitting) ||
-         !performTransformation(comp, "O^O LATE EDGE SPLITTING: Omit ebp dependency for %s node %s\n", node->getOpCode().getName(), cg->getDebug()->getName(node));
+      bool needVMThreadDep = true;
 
       if ((lowValue | highValue) == 0)
          {
@@ -3545,9 +3507,7 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpneEvaluator(TR::Node *node, T
             generateRegRegInstruction(OR4RegReg, node, targetRegister, cmpRegister->getHighOrder(), cg);
             }
 
-         cg->setVMThreadRequired(true);
          generateConditionalJumpInstruction(JNE4, node, cg, needVMThreadDep);
-         cg->setVMThreadRequired(false);
 
          if (targetNeedsToBeExplicitlyStopped)
             {
@@ -3558,8 +3518,6 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpneEvaluator(TR::Node *node, T
          {
          cmpRegister = cg->evaluate(firstChild);
          compareGPRegisterToConstantForEquality(node, lowValue, cmpRegister->getLowOrder(), cg);
-
-         cg->setVMThreadRequired(true);
 
          // Evaluate the global register dependencies and emit the branches by hand;
          // we cannot call generateConditionalJumpInstruction() here because we need
@@ -3572,8 +3530,6 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpneEvaluator(TR::Node *node, T
             cg->evaluate(third);
             deps = generateRegisterDependencyConditions(third, cg, 1, &popRegisters);
             deps->setMayNeedToPopFPRegisters(true);
-            if (needVMThreadDep)
-               deps->addPostCondition(cg->getVMThreadRegister(), (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
             deps->stopAddingConditions();
             generateLabelInstruction(JNE4, node, destinationLabel, deps, cg);
             compareGPRegisterToConstantForEquality(node, highValue, cmpRegister->getHighOrder(), cg);
@@ -3596,8 +3552,6 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpneEvaluator(TR::Node *node, T
             compareGPRegisterToConstantForEquality(node, highValue, cmpRegister->getHighOrder(), cg);
             generateLabelInstruction(JNE4, node, destinationLabel, needVMThreadDep, cg);
             }
-
-         cg->setVMThreadRequired(false);
          }
 
       cg->decReferenceCount(firstChild);
@@ -3615,9 +3569,7 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpltEvaluator(TR::Node *node, T
    {
    if (generateLAddOrSubForOverflowCheck(node, cg))
       {
-      cg->setVMThreadRequired(true);
       generateConditionalJumpInstruction(JO4, node, cg, true);
-      cg->setVMThreadRequired(false);
       }
    else
       {
@@ -3632,9 +3584,7 @@ TR::Register *OMR::X86::I386::TreeEvaluator::iflcmpgeEvaluator(TR::Node *node, T
    {
    if (generateLAddOrSubForOverflowCheck(node, cg))
       {
-      cg->setVMThreadRequired(true);
       generateConditionalJumpInstruction(JNO4, node, cg, true);
-      cg->setVMThreadRequired(false);
       }
    else
       {

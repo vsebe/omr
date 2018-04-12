@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -534,24 +534,13 @@ TR::Register *OMR::X86::TreeEvaluator::fpReturnEvaluator(TR::Node *node, TR::Cod
    TR::RealRegister::RegNum machineReturnRegister =
       (returnRegister->isSinglePrecision())? linkageProperties.getFloatReturnRegister() : linkageProperties.getDoubleReturnRegister();
 
-   TR::RegisterDependencyConditions  *dependencies;
+   TR::RegisterDependencyConditions *dependencies = NULL;
    if (machineReturnRegister != TR::RealRegister::NoReg)
       {
-      dependencies = generateRegisterDependencyConditions((uint8_t)2, 0, cg);
-      dependencies->addPreCondition(returnRegister, machineReturnRegister, cg);
-      }
-   else
-      {
       dependencies = generateRegisterDependencyConditions((uint8_t)1, 0, cg);
+      dependencies->addPreCondition(returnRegister, machineReturnRegister, cg);
+      dependencies->stopAddingConditions();
       }
-
-   // Protect VMThread register fetch, it could be NULL if we are generating from WCode
-   //
-   if (linkageProperties.getMethodMetaDataRegister() != TR::RealRegister::NoReg)
-      {
-      dependencies->addPreCondition(cg->getVMThreadRegister(), (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
-      }
-   dependencies->stopAddingConditions();
 
    if (linkageProperties.getCallerCleanup())
       {
@@ -600,6 +589,103 @@ TR::Register *OMR::X86::TreeEvaluator::fpBinaryArithmeticEvaluator(TR::Node     
       temp.genericFPAnalyser(node);
       return node->getRegister();
       }
+   }
+
+TR::Register *OMR::X86::TreeEvaluator::fpUnaryMaskEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   static uint8_t MASK_FABS[] =
+      {
+      0xff, 0xff, 0xff, 0x7f,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      };
+   static uint8_t MASK_DABS[] =
+      {
+      0xff, 0xff, 0xff, 0xff,
+      0xff, 0xff, 0xff, 0x7f,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      };
+   static uint8_t MASK_FNEG[] =
+      {
+      0x00, 0x00, 0x00, 0x80,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      };
+   static uint8_t MASK_DNEG[] =
+      {
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x80,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
+      };
+
+   uint8_t*      mask;
+   TR_X86OpCodes opcode;
+   TR_X86OpCodes x87op;
+   switch (node->getOpCodeValue())
+      {
+      case TR::fabs:
+         mask = MASK_FABS;
+         opcode = PANDRegMem;
+         x87op = FABSReg;
+         break;
+      case TR::dabs:
+         mask = MASK_DABS;
+         opcode = PANDRegMem;
+         x87op = DABSReg;
+         break;
+      case TR::fneg:
+         mask = MASK_FNEG;
+         opcode = PXORRegMem;
+         x87op = FCHSReg;
+         break;
+      case TR::dneg:
+         mask = MASK_DNEG;
+         opcode = PXORRegMem;
+         x87op = DCHSReg;
+         break;
+      default:
+         TR_ASSERT(false, "Unsupported OpCode");
+      }
+
+   auto child = node->getFirstChild();
+   auto value = cg->evaluate(child);
+   auto result = child->getReferenceCount() == 1 ? value : cg->allocateRegister(value->getKind());
+
+   if (result != value && value->isSinglePrecision())
+      {
+      result->setIsSinglePrecision();
+      }
+
+   if (value->getKind() != TR_FPR) // Legacy supported for X87, to be deleted
+      {
+      if (value->needsPrecisionAdjustment())
+         TR::TreeEvaluator::insertPrecisionAdjustment(value, node, cg);
+      if (value->mayNeedPrecisionAdjustment())
+         result->setMayNeedPrecisionAdjustment();
+
+      if (result != value)
+         {
+         generateFPST0STiRegRegInstruction(value->isSinglePrecision() ? FLDRegReg : DLDRegReg, node, result, value, cg);
+         }
+      generateFPRegInstruction(x87op, node, result, cg);
+      }
+   else
+      {
+      // TODO 3-OP Optimization
+      if (result != value)
+         {
+         generateRegRegInstruction(MOVDQURegReg, node, result, value, cg);
+         }
+      generateRegMemInstruction(opcode, node, result, generateX86MemoryReference(cg->findOrCreate16ByteConstant(node, mask), cg), cg);
+      }
+
+   node->setRegister(result);
+   cg->decReferenceCount(child);
+   return result;
    }
 
 TR::Register *OMR::X86::TreeEvaluator::faddEvaluator(TR::Node *node, TR::CodeGenerator *cg)
@@ -748,51 +834,6 @@ TR::Register *OMR::X86::TreeEvaluator::commonFPRemEvaluator(TR::Node          *n
 
    return dividendReg;
    }
-
-TR::Register *OMR::X86::TreeEvaluator::fnegEvaluator(TR::Node *node, TR::CodeGenerator *cg)
-   {
-   TR::Node     *child          = node->getFirstChild();
-   TR::Register *sourceRegister = cg->evaluate(child);
-   TR::Register *targetRegister;
-   if (sourceRegister->getKind() == TR_FPR)
-      {
-      TR::IA32ConstantDataSnippet *cds = cg->findOrCreate4ByteConstant(node, FLOAT_NEG_ZERO);
-      targetRegister = cg->allocateSinglePrecisionRegister(TR_FPR);
-      generateRegMemInstruction(MOVSSRegMem, node, targetRegister, generateX86MemoryReference(cds, cg), cg);
-      generateRegRegInstruction(XORPSRegReg, node, targetRegister, sourceRegister, cg);
-      }
-   else
-      {
-      targetRegister = cg->floatClobberEvaluate(child);
-      generateFPRegInstruction(FCHSReg, node, targetRegister, cg);
-      }
-   node->setRegister(targetRegister);
-   cg->decReferenceCount(child);
-   return targetRegister;
-   }
-
-TR::Register *OMR::X86::TreeEvaluator::dnegEvaluator(TR::Node *node, TR::CodeGenerator *cg)
-   {
-   TR::Node     *child          = node->getFirstChild();
-   TR::Register *sourceRegister = cg->evaluate(child);
-   TR::Register *targetRegister;
-   if (sourceRegister->getKind() == TR_FPR)
-      {
-      TR::IA32ConstantDataSnippet *cds = cg->findOrCreate8ByteConstant(node, DOUBLE_NEG_ZERO);
-      targetRegister = cg->allocateRegister(TR_FPR);
-      generateRegMemInstruction(cg->getXMMDoubleLoadOpCode(), node, targetRegister, generateX86MemoryReference(cds, cg), cg);
-      generateRegRegInstruction(XORPDRegReg, node, targetRegister, sourceRegister, cg);
-      }
-   else
-      {
-      targetRegister = cg->doubleClobberEvaluate(child);
-      generateFPRegInstruction(DCHSReg, node, targetRegister, cg);
-      }
-   node->setRegister(targetRegister);
-   cg->decReferenceCount(child);
-   return targetRegister;
-   }
-
 
 // also handles b2f, bu2f, s2f, su2f evaluators
 TR::Register *OMR::X86::TreeEvaluator::i2fEvaluator(TR::Node *node, TR::CodeGenerator *cg)
@@ -2011,9 +2052,9 @@ TR::Register *OMR::X86::TreeEvaluator::generateBranchOrSetOnFPCompare(TR::Node  
                                                                   bool         generateBranch,
                                                                   TR::CodeGenerator *cg)
    {
-   List<TR::Register>                    popRegisters(cg->trMemory());
-   TR::Register                         *targetRegister = NULL;
-   TR::RegisterDependencyConditions  *deps           = NULL;
+   List<TR::Register> popRegisters(cg->trMemory());
+   TR::Register *targetRegister = NULL;
+   TR::RegisterDependencyConditions *deps = NULL;
 
    if (generateBranch)
       {
@@ -2023,18 +2064,8 @@ TR::Register *OMR::X86::TreeEvaluator::generateBranchOrSetOnFPCompare(TR::Node  
          cg->evaluate(third);
          deps = generateRegisterDependencyConditions(third, cg, 1, &popRegisters);
          deps->setMayNeedToPopFPRegisters(true);
+         deps->stopAddingConditions();
          }
-      else
-         {
-         deps = generateRegisterDependencyConditions((uint8_t)0, 1, cg);
-         }
-
-      if (cg->getLinkage()->getProperties().getMethodMetaDataRegister() != TR::RealRegister::NoReg)
-         {
-         deps->addPostCondition(cg->getVMThreadRegister(),
-                                (TR::RealRegister::RegNum)cg->getVMThreadRegister()->getAssociation(), cg);
-         }
-      deps->stopAddingConditions();
       }
 
    // If not using FCOMI/UCOMISS/UCOMISD, then we must be interpreting the FPSW in AH;
@@ -2064,11 +2095,10 @@ TR::Register *OMR::X86::TreeEvaluator::generateBranchOrSetOnFPCompare(TR::Node  
       if (generateBranch)
          {
          // We want the pre-conditions on the first branch, and the post-conditions
-         // on the last one. If there are no global register dependencies, we only
-         // need a post-condition for the vmThread register.
+         // on the last one.
          //
          TR::RegisterDependencyConditions  *deps1 = NULL;
-         if (deps->getPreConditions() && deps->getPreConditions()->getMayNeedToPopFPRegisters())
+         if (deps && deps->getPreConditions() && deps->getPreConditions()->getMayNeedToPopFPRegisters())
             {
             deps1 = deps->clone(cg);
             deps1->setNumPostConditions(0, cg->trMemory());
@@ -2103,7 +2133,7 @@ TR::Register *OMR::X86::TreeEvaluator::generateBranchOrSetOnFPCompare(TR::Node  
          fallThroughLabel->setEndInternalControlFlow();
 
          TR::RegisterDependencyConditions  *deps1 = NULL;
-         if (deps->getPreConditions() && deps->getPreConditions()->getMayNeedToPopFPRegisters())
+         if (deps && deps->getPreConditions() && deps->getPreConditions()->getMayNeedToPopFPRegisters())
             {
             deps1 = deps->clone(cg);
             deps1->setNumPostConditions(0, cg->trMemory());

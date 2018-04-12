@@ -180,8 +180,8 @@ WIN32_WINNT version constants :
 #define _WIN32_WINNT_WIN7                   0x0601
 #define _WIN32_WINNT_WIN8                   0x0602
 #define _WIN32_WINNT_WINBLUE                0x0603
-#define _WIN32_WINNT_WINTHRESHOLD           0x0A00 /* ABRACADABRA_THRESHOLD * /
-#define _WIN32_WINNT_WIN10                  0x0A00 /* ABRACADABRA_THRESHOLD * /
+#define _WIN32_WINNT_WINTHRESHOLD           0x0A00 / * ABRACADABRA_THRESHOLD * /
+#define _WIN32_WINNT_WIN10                  0x0A00 / * ABRACADABRA_THRESHOLD * /
 */
 
 	if (NULL == PPG_si_osType) {
@@ -771,6 +771,19 @@ omrsysinfo_get_memory_info(struct OMRPortLibrary *portLibrary, struct J9MemoryIn
 	Trc_PRT_sysinfo_get_memory_info_Exit(0);
 	PdhCloseQuery(statsHandle);
 	return 0;
+}
+
+uint64_t
+omrsysinfo_get_addressable_physical_memory(struct OMRPortLibrary *portLibrary)
+{
+	uint64_t memoryLimit = 0;
+	uint64_t usableMemory = portLibrary->sysinfo_get_physical_memory(portLibrary);
+	
+	if (OMRPORT_LIMIT_LIMITED == portLibrary->sysinfo_get_limit(portLibrary, OMRPORT_RESOURCE_ADDRESS_SPACE, &memoryLimit)) {
+		/* there is a limit on the memory we can use so take the minimum of this usable amount and the physical memory */
+		usableMemory = OMR_MIN(memoryLimit, usableMemory);
+	}
+	return usableMemory;
 }
 
 /**

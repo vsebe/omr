@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015, 2017 IBM Corp. and others
+ * Copyright (c) 2015, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -28,10 +28,10 @@
 #include <vector>
 
 #if defined(WIN32) || defined(WIN64)
-/* windows.h defined uintptr_t.  Ignore its definition */
+/* windows.h defines UDATA: Ignore its definition. */
 #define UDATA UDATA_win_
 #include "dia2.h"
-#undef UDATA	/* this is safe because our UDATA is a typedef, not a macro */
+#undef UDATA /* this is safe because our UDATA is a typedef, not a macro */
 #endif
 
 #include "ddr/ir/ClassUDT.hpp"
@@ -53,19 +53,19 @@ typedef struct PostponedType
 	string name;
 } PostponedType;
 
-
-class PdbScanner: public Scanner
+class PdbScanner : public Scanner
 {
 public:
-	DDR_RC startScan(OMRPortLibrary *portLibrary, Symbol_IR *const ir, vector<string> *debugFiles, string blacklistPath);
+	virtual DDR_RC startScan(OMRPortLibrary *portLibrary, Symbol_IR *ir,
+			vector<string> *debugFiles, const char *blacklistPath);
 
 private:
 	Symbol_IR *_ir;
 	unordered_map<string, Type *> _typeMap;
 	vector<PostponedType> _postponedFields;
 
-	void addType(Type *type, bool addToIR);
-	DDR_RC addFieldMember(IDiaSymbol *symbol, ClassUDT *const udt);
+	void addType(UDT *type, NamespaceUDT *outerUDT);
+	DDR_RC addFieldMember(IDiaSymbol *symbol, ClassUDT *udt);
 	DDR_RC setBaseType(IDiaSymbol *typeSymbol, Type **type);
 	DDR_RC setBaseTypeFloat(ULONGLONG ulLen, Type **type);
 	DDR_RC setBaseTypeInt(ULONGLONG ulLen, Type **type);
@@ -79,21 +79,19 @@ private:
 	DDR_RC setMemberOffset(IDiaSymbol *symbol, Field *newField);
 
 	DDR_RC addChildrenSymbols(IDiaSymbol *symbol, enum SymTagEnum symTag, NamespaceUDT *outerUDT);
-	DDR_RC addEnumMembers(IDiaSymbol *diaSymbol, EnumUDT *const e);
-	DDR_RC createClassUDT(IDiaSymbol *symbol, NamespaceUDT *outerUDT);
+	DDR_RC addEnumMembers(IDiaSymbol *diaSymbol, EnumUDT *e);
+	DDR_RC createClassUDT(IDiaSymbol *symbol, ClassUDT **newClass, NamespaceUDT *outerUDT);
 	DDR_RC createEnumUDT(IDiaSymbol *symbol, NamespaceUDT *outerUDT);
 	DDR_RC createTypedef(IDiaSymbol *symbol, NamespaceUDT *outerUDT);
 	DDR_RC loadDataFromPdb(const wchar_t *filename, IDiaDataSource **diaDataSource, IDiaSession **diaSession, IDiaSymbol **diaSymbol);
 	DDR_RC setSuperClassName(IDiaSymbol *symbol, ClassUDT *newUDT);
-	void getNamespaceFromName(string *name, NamespaceUDT **outerUDT);
-	DDR_RC getName(IDiaSymbol *symbol, string *name);
-	DDR_RC getSize(IDiaSymbol *symbol, ULONGLONG *size);
-	Type *getType(string s);
-	string getUDTname(UDT *u);
+	void getNamespaceFromName(const string &name, NamespaceUDT **outerUDT);
+	static DDR_RC getName(IDiaSymbol *symbol, string *name);
+	static string getSimpleName(const string &name);
+	static DDR_RC getSize(IDiaSymbol *symbol, ULONGLONG *size);
+	Type *getType(const string &name);
 	void initBaseTypeList();
 	DDR_RC updatePostponedFieldNames();
-	void renameAnonymousTypes();
-	void renameAnonymousType(Type *type, ULONGLONG *unnamedTypeCount);
 };
 
 #endif /* PDBSCANNER_HPP */

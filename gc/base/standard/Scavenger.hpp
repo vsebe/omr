@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -145,6 +145,8 @@ public:
 	 * Function members
 	 */
 private:
+	void saveMasterThreadTenureTLHRemainders(MM_EnvironmentStandard *env);
+	void restoreMasterThreadTenureTLHRemainders(MM_EnvironmentStandard *env);
 	void setBackOutFlag(MM_EnvironmentBase *env, BackOutState value);
 	MMINLINE bool isBackOutFlagRaised() { return _extensions->isScavengerBackOutFlagRaised(); }
 	MMINLINE bool shouldAbortScanLoop() {
@@ -257,6 +259,9 @@ public:
 	void fixupObjectScan(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr);
 	bool fixupSlot(GC_SlotObject *slotObject);
 	bool fixupSlotWithoutCompression(volatile omrobjectptr_t *slotPtr);
+	
+	void scavengeRememberedSetListIndirect(MM_EnvironmentStandard *env);
+	void scavengeRememberedSetListDirect(MM_EnvironmentStandard *env);
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */
 
 	/**
@@ -356,9 +361,8 @@ public:
 	/**
 	 * Called (typically at the end of GC) to explicitly abandon the TLH remainders (for the calling thread)
 	 */
-	void abandonTLHRemainders(MM_EnvironmentStandard *env);
 	void abandonSurvivorTLHRemainder(MM_EnvironmentStandard *env);
-	void abandonTenureTLHRemainder(MM_EnvironmentStandard *env);
+	void abandonTenureTLHRemainder(MM_EnvironmentStandard *env, bool preserveRemainders = false);
 
 	void reportGCStart(MM_EnvironmentStandard *env);
 	void reportGCEnd(MM_EnvironmentStandard *env);
@@ -367,7 +371,7 @@ public:
 	void reportScavengeStart(MM_EnvironmentStandard *env);
 	void reportScavengeEnd(MM_EnvironmentStandard *env, bool lastIncrement);
 
-	MMINLINE MM_ScavengerHotFieldStats *getHotFieldStats(MM_EnvironmentBase *env) { return &(env->_hotFieldStats); }
+	MMINLINE MM_ScavengerHotFieldStats *getHotFieldStats(MM_EnvironmentBase *env) { return env->_hotFieldStats; }
 	void masterClearHotFieldStats();
 	void masterReportHotFieldStats();
 	void clearHotFieldStats(MM_EnvironmentBase *env);

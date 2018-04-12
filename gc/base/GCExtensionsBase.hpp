@@ -192,6 +192,7 @@ private:
 	bool _isRememberedSetInOverflow;
 
 	volatile BackOutState _backOutState; /**< set if a thread is unable to copy an object due to lack of free space in both Survivor and Tenure */
+	volatile bool _concurrentGlobalGCInProgress; /**< set to true if concurrent Global GC is in progress */
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	bool debugConcurrentScavengerPageAlignment; /**< if true allows debug output prints for Concurrent Scavenger Page Alignment logic */
 	uintptr_t concurrentScavengerPageSectionSize; /**< selected section size for Concurrent Scavenger Page */
@@ -221,6 +222,8 @@ public:
 
 #if defined(OMR_GC_MODRON_SCAVENGER)
 	MM_Scavenger *scavenger;
+	void *_masterThreadTenureTLHRemainderBase;  /**< base and top pointers of the last unused tenure TLH copy cache, that will be loaded to thread env during master setup */
+	void *_masterThreadTenureTLHRemainderTop;
 #endif /* OMR_GC_MODRON_SCAVENGER */
 
 	J9Pool* environments;
@@ -406,7 +409,7 @@ public:
 	};
 	ScavengerScanOrdering scavengerScanOrdering; /**< scan ordering in Scavenger */
 	bool scavengerTraceHotFields; /**< whether tracing hot fields in Scavenger is enabled */
-	MM_ScavengerHotFieldStats scavengerHotFieldStats; /**< hot field stats accumulated over all GC threads */
+	MM_ScavengerHotFieldStats *scavengerHotFieldStats; /**< hot field stats accumulated over all GC threads */
 #if defined(OMR_GC_MODRON_SCAVENGER)
 	uintptr_t scvTenureRatioHigh;
 	uintptr_t scvTenureRatioLow;
@@ -760,6 +763,7 @@ private:
 protected:
 	virtual bool initialize(MM_EnvironmentBase* env);
 	virtual void tearDown(MM_EnvironmentBase* env);
+	virtual void computeDefaultMaxHeap(MM_EnvironmentBase* env);
 
 public:
 	static MM_GCExtensionsBase* newInstance(MM_EnvironmentBase* env);
@@ -962,6 +966,9 @@ public:
 	MMINLINE void setScavengerBackOutState(BackOutState backOutState) { _backOutState = backOutState; }
 	MMINLINE BackOutState getScavengerBackOutState() { return _backOutState; }
 	MMINLINE bool isScavengerBackOutFlagRaised() { return backOutFlagCleared < _backOutState; }
+	
+	MMINLINE bool shouldScavengeNotifyGlobalGCOfOldToOldReference() { return _concurrentGlobalGCInProgress; }
+	MMINLINE void setConcurrentGlobalGCInProgress(bool inProgress) { _concurrentGlobalGCInProgress = inProgress; }
 #endif /* OMR_GC_MODRON_SCAVENGER */
 
 	/**
@@ -1196,6 +1203,7 @@ public:
 		, _guaranteedNurseryEnd(NULL)
 		, _isRememberedSetInOverflow(false)
 		, _backOutState(backOutFlagCleared)
+		, _concurrentGlobalGCInProgress(false)
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 		, debugConcurrentScavengerPageAlignment(false)
 		, concurrentScavengerPageSectionSize(0)
@@ -1214,6 +1222,8 @@ public:
 		, _tenureSize(0)
 #if defined(OMR_GC_MODRON_SCAVENGER)
 		, scavenger(NULL)
+		, _masterThreadTenureTLHRemainderBase(NULL)
+		, _masterThreadTenureTLHRemainderTop(NULL)
 #endif /* OMR_GC_MODRON_SCAVENGER */
 		, environments(NULL)
 #if defined(OMR_GC_CONCURRENT_SWEEP)
@@ -1333,6 +1343,7 @@ public:
 #if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
 		, scavengerScanOrdering(OMR_GC_SCAVENGER_SCANORDERING_HIERARCHICAL)
 		, scavengerTraceHotFields(false)
+		, scavengerHotFieldStats(NULL)
 #endif /* OMR_GC_MODRON_SCAVENGER || OMR_GC_VLHGC */
 #if defined(OMR_GC_MODRON_SCAVENGER)
 		, scvTenureRatioHigh(J9_SCV_TENURE_RATIO_HIGH)

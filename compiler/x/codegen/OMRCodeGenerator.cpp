@@ -303,12 +303,16 @@ OMR::X86::CodeGenerator::initialize(TR::Compilation *comp)
     * GRA does not work with vector registers on 32 bit due to a bug where xmm registers are not being assigned.
     * This disables GRA for vector registers on 32 bit.
     * This code will be reenabled as part of Issue 2035 which tracks the progress of fixing the GRA bug.
+    * GRA does not work with vector registers on 64 bit either. So GRA is now being disabled vector registers.
+    * This code will be reenabled as part of Issue 2280
     */
+#if 0
    if (TR::Compiler->target.is64Bit())
       {
       self()->setFirstGlobalVRF(self()->getFirstGlobalFPR());
       self()->setLastGlobalVRF(self()->getLastGlobalFPR());
       }
+#endif // closes the if 0.
 
    // Initialize Linkage for Code Generator
    self()->initializeLinkage();
@@ -371,7 +375,6 @@ OMR::X86::CodeGenerator::initialize(TR::Compilation *comp)
 
    if (!comp->getOption(TR_DisableArraySetOpts))
       {
-      self()->setSupportsArraySetToZero();
       self()->setSupportsArraySet();
       }
 
@@ -493,7 +496,6 @@ OMR::X86::CodeGenerator::CodeGenerator() :
    _dependentDiscardableRegisters(getTypedAllocator<TR::Register*>(TR::comp()->allocator())),
    _clobberingInstructions(getTypedAllocator<TR::ClobberingInstruction*>(TR::comp()->allocator())),
    _outlinedInstructionsList(getTypedAllocator<TR_OutlinedInstructions*>(TR::comp()->allocator())),
-   _deferredSplits(getTypedAllocator<TR::X86LabelInstruction*>(TR::comp()->allocator())),
    _flags(0)
    {
    _clobIterator = _clobberingInstructions.begin();
@@ -580,18 +582,10 @@ OMR::X86::CodeGenerator::beginInstructionSelection()
          _returnTypeInfoInstruction = new (self()->trHeapMemory()) TR::X86ImmInstruction((TR::Instruction *)NULL, DDImm4, 0, self());
       }
 
-   TR::RegisterDependencyConditions  *deps = generateRegisterDependencyConditions((uint8_t)0, (uint8_t)1, self());
-   if (_linkageProperties->getMethodMetaDataRegister() != TR::RealRegister::NoReg)
-      {
-      deps->addPostCondition(self()->getVMThreadRegister(),
-                             (TR::RealRegister::RegNum)self()->getVMThreadRegister()->getAssociation(), self());
-      }
-   deps->stopAddingPostConditions();
-
    if (self()->getAppendInstruction())
-      generateInstruction(PROCENTRY, startNode, deps, self());
+      generateInstruction(PROCENTRY, startNode, self());
    else
-      new (self()->trHeapMemory()) TR::Instruction(deps, PROCENTRY, (TR::Instruction *)NULL, self());
+      new (self()->trHeapMemory()) TR::Instruction(PROCENTRY, (TR::Instruction *)NULL, self());
 
    // Set the default FPCW to single precision mode if we are allowed to.
    //
@@ -1038,11 +1032,16 @@ OMR::X86::CodeGenerator::getSupportsOpCodeForAutoSIMD(TR::ILOpCode opcode, TR::D
        * This function is where AutoSIMD checks to see if getvelem is suppored for use in reductions.
        * The getvelem case was changed to disable the use of getvelem on 32 bit x86.
        * This code will be reenabled as part of Issue 2035 which tracks the progress of fixing the GRA bug.
+       * GRA does not work with vector registers on 64 bit either.
+       * getvelem is now being disabled on 64 bit for the same reasons as 32 bit.
+       * This code will be reenabled as part of Issue 2280
        */
       case TR::getvelem:
+#if 0
          if (TR::Compiler->target.is64Bit() && (dt == TR::Int32 || dt == TR::Int64 || dt == TR::Float || dt == TR::Double))
             return true;
          else
+#endif //closes the if 0
             return false;
       default:
          return false;
@@ -1492,8 +1491,6 @@ void OMR::X86::CodeGenerator::doBackwardsRegisterAssignment(
          }
       }
 
-   TR::RealRegister::RegNum vmThreadIndex = _linkageProperties->getMethodMetaDataRegister();
-
    if (self()->getDebug())
       self()->getDebug()->startTracingRegisterAssignment("backward", kindsToAssign);
 
@@ -1501,22 +1498,6 @@ void OMR::X86::CodeGenerator::doBackwardsRegisterAssignment(
       {
       TR::Instruction  *inst = instructionCursor;
 
-      // Detect BBEnd end of a non-extended block or the last BBEnd end of an extended block
-      if (comp->cg()->getSupportsVMThreadGRA() && inst->getKind() == TR::Instruction::IsLabel && vmThreadIndex != TR::RealRegister::NoReg)
-         {
-         TR::Node *node = inst->getNode();
-         if (node && node->getOpCodeValue() == TR::BBEnd)
-            {
-            TR::Block *block = node->getBlock();
-            if (block && (!block->getNextBlock() || !block->getNextBlock()->isExtensionOfPreviousBlock()))
-               { // Reset vmThread register state.
-               TR::RealRegister *vmThreadRealReg = self()->machine()->getX86RealRegister(TR::RealRegister::ebp);
-               self()->getVMThreadRegister()->setAssignedRegister(NULL);
-               vmThreadRealReg->setAssignedRegister(NULL);
-               vmThreadRealReg->setState(TR::RealRegister::Free);
-               }
-            }
-         }
 #ifdef DEBUG
       if (dumpPreGP)
          {
@@ -2209,7 +2190,7 @@ TR_OutlinedInstructions * OMR::X86::CodeGenerator::findOutlinedInstructionsFromL
    auto oiIterator = self()->getOutlinedInstructionsList().begin();
    while (oiIterator != self()->getOutlinedInstructionsList().end())
       {
-      if ((*oiIterator)->getEntryLabel() == label || (*oiIterator)->getEntryLabel()->getVMThreadRestoringLabel() == label)
+      if ((*oiIterator)->getEntryLabel() == label)
          return *oiIterator;
       ++oiIterator;
       }
@@ -2727,20 +2708,7 @@ uint32_t OMR::X86::CodeGenerator::isPreservedRegister(int32_t regIndex)
 TR::Instruction *OMR::X86::CodeGenerator::splitBlockEntry(TR::Instruction *instr)
    {
    TR::LabelSymbol *newLabel = generateLabelSymbol(self());
-   TR::Instruction *location = instr;
-   // late edge-splitting may have introduced a vmthreadrestoring label
-   // check for that and update the location accordingly so that
-   // the new label is placed correctly
-   //
-   if (instr->getKind() == TR::Instruction::IsLabel)
-      {
-      TR::LabelSymbol *label = ((TR::X86LabelInstruction *)instr)->getLabelSymbol();
-      if (label->getVMThreadRestoringLabel())
-         location = label->getVMThreadRestoringLabel()->getInstruction();
-      }
-   location = location->getPrev();
-
-   return generateLabelInstruction(location, LABEL, newLabel, self());
+   return generateLabelInstruction(instr->getPrev(), LABEL, newLabel, self());
    }
 
 TR::Instruction *OMR::X86::CodeGenerator::splitEdge(TR::Instruction *instr,
@@ -2774,13 +2742,6 @@ TR::Instruction *OMR::X86::CodeGenerator::splitEdge(TR::Instruction *instr,
       targetLabel = labelInstr->getLabelSymbol();
       labelInstr->setLabelSymbol(newLabel);
       location = targetLabel->getInstruction()->getPrev();
-      // for late-edge splitting
-      if (targetLabel->getVMThreadRestoringLabel())
-         {
-         location = targetLabel->getVMThreadRestoringLabel()->getInstruction();
-         traceMsg(self()->comp(), "found vmthreadrestoring label at %p\n", location);
-         location = location->getPrev();
-         }
       traceMsg(self()->comp(), "splitEdge fixing branch %p, appending to %p\n", instr, location);
       // now fixup any remaining jmp instrs that jmp to the target
       // so that they now jmp to the new label
@@ -2807,9 +2768,6 @@ TR::Instruction *OMR::X86::CodeGenerator::splitEdge(TR::Instruction *instr,
       {
       TR::Instruction *jmpLocation = cursor->getPrev();
       TR::LabelSymbol *l = targetLabel;
-      // for late-edge splitting
-      if (firstJump && targetLabel->getVMThreadRestoringLabel())
-         l = targetLabel->getVMThreadRestoringLabel();
       TR::Instruction *i = generateLabelInstruction(jmpLocation, JMP4, l, self());
       traceMsg(self()->comp(), "splitEdge jmp instr at [%p]\n", i);
       }
@@ -3568,110 +3526,6 @@ TR_X86ScratchRegisterManager *OMR::X86::CodeGenerator::generateScratchRegisterMa
    return new (self()->trHeapMemory()) TR_X86ScratchRegisterManager(capacity, self());
    }
 
-void OMR::X86::CodeGenerator::clearDeferredSplits()
-   {
-   if (_internalControlFlowNestingDepth == 0)
-      {
-      if (self()->getTraceRAOption(TR_TraceRALateEdgeSplitting))
-         traceMsg(self()->comp(), "LATE EDGE SPLITTING: clearDeferredSplits\n");
-      _deferredSplits.clear();
-      }
-   else
-      {
-      // Whatever made us think it was safe to clear deferred splits would be
-      // uncertain inside internal control flow, so do nothing.
-      }
-   }
-
-void OMR::X86::CodeGenerator::performDeferredSplits()
-   {
-   if (self()->getTraceRAOption(TR_TraceRALateEdgeSplitting))
-      traceMsg(self()->comp(), "LATE EDGE SPLITTING: performDeferredSplits\n");
-
-   for (auto li = _deferredSplits.begin(); li != _deferredSplits.end(); ++li)
-      {
-      TR::LabelSymbol *newLabelSymbol = self()->splitLabel((*li)->getLabelSymbol());
-      if (self()->getTraceRAOption(TR_TraceRALateEdgeSplitting))
-         traceMsg(self()->comp(), "LATE EDGE SPLITTING: Pointed branch %s at vmThread-restoring label %s\n",
-                  self()->getDebug()->getName(*li),
-                  self()->getDebug()->getName(newLabelSymbol));
-
-      (*li)->setLabelSymbol(newLabelSymbol);
-      }
-
-   _deferredSplits.clear();
-   }
-
-void
-OMR::X86::CodeGenerator::processDeferredSplits(bool clear)
-   {
-   if (clear)
-      self()->clearDeferredSplits();
-   else
-      self()->performDeferredSplits();
-   }
-
-TR::LabelSymbol *OMR::X86::CodeGenerator::splitLabel(TR::LabelSymbol *targetLabel, TR::X86LabelInstruction *instructionToDefer)
-   {
-   TR::Instruction *instr = targetLabel->getInstruction();
-   TR_ASSERT(instr, "splitLabel only works on a label from a TR::Instruction");
-
-   // See if we can defer splitting this label until we know for sure that
-   // ebp won't contain the vmthread
-   //
-   TR::X86LabelInstruction *labelInstr = instr->getIA32LabelInstruction();
-   TR::RealRegister *ebp = self()->machine()->getX86RealRegister(self()->getProperties().getMethodMetaDataRegister());
-   if (instructionToDefer && !ebp->getAssignedRegister()
-      && performTransformation(self()->comp(), "O^O LATE EDGE SPLITTING: Defer splitting %s for %s\n", self()->getDebug()->getName(targetLabel), self()->getDebug()->getName(instructionToDefer)))
-      {
-      TR_ASSERT(instructionToDefer->getOpCode().isBranchOp() && instructionToDefer->getLabelSymbol() == targetLabel,
-         "instructionToDefer must be a branch to targetLabel");
-
-      // Just because ebp is not assigned to anything doesn't mean the value
-      // sitting in it can't possibly be the vmthread register.  There's still
-      // a chance that the last value in ebp was indeed the vmthread register.
-      // Defer the decision to split until we find out for sure that we've
-      // assigned something else to ebp.
-      //
-      self()->addDeferredSplit(instructionToDefer);
-      return targetLabel;
-      }
-
-   // Add another target label instruction if there isn't one already
-   //
-   if (!targetLabel->getVMThreadRestoringLabel())
-      {
-      TR::LabelSymbol *newLabel = generateLabelSymbol(self());
-      targetLabel->setVMThreadRestoringLabel(newLabel);
-      newLabel->setInstruction(generateLabelInstruction(targetLabel->getInstruction()->getPrev(), LABEL, newLabel, self()));
-      self()->generateDebugCounter(targetLabel->getInstruction(), "cg.lateSplitEdges", 1, TR::DebugCounter::Exorbitant);
-      if (self()->getTraceRAOption(TR_TraceRALateEdgeSplitting))
-         traceMsg(self()->comp(), "LATE EDGE SPLITTING: Inserted vmThread-restoring label %s before %s\n",
-            self()->getDebug()->getName(newLabel),
-            self()->getDebug()->getName(targetLabel));
-      }
-
-   // Conservatively store ebp in the prologue just in case any of these split labels decide they need to load it
-   // That decision will occur at binary encoding time, at which point it's too late to do anything about it.
-   // TODO: This is wasteful.  Come up with something better.
-   //
-   TR::Register *vmThreadVirtualReg = self()->getVMThreadRegister();
-   if (vmThreadVirtualReg->getBackingStorage() == NULL)
-      {
-      // copied from RegisterDependency.cpp
-      vmThreadVirtualReg->setBackingStorage(self()->allocateVMThreadSpill());
-      self()->getSpilledIntRegisters().push_front(vmThreadVirtualReg);
-      }
-
-   // Set spill instruction to the "spill in prolog" value.
-   //
-   self()->setVMThreadSpillInstruction((TR::Instruction *)0xffffffff);
-   if (self()->getTraceRAOption(TR_TraceRALateEdgeSplitting))
-      traceMsg(self()->comp(), "LATE EDGE SPLITTING: Store ebp in prologue\n");
-
-   return targetLabel->getVMThreadRestoringLabel();
-   }
-
 bool
 TR_X86ScratchRegisterManager::reclaimAddressRegister(TR::MemoryReference *mr)
    {
@@ -3742,8 +3596,6 @@ void OMR::X86::CodeGenerator::removeUnavailableRegisters(TR_RegisterCandidate * 
       }
    }
 
-#if DEBUG
-
 void OMR::X86::CodeGenerator::dumpDataSnippets(TR::FILE *outFile)
    {
 
@@ -3753,7 +3605,7 @@ void OMR::X86::CodeGenerator::dumpDataSnippets(TR::FILE *outFile)
    TR::IA32DataSnippet              * cursor;
    int32_t                                  size;
 
-   for (int exp=3; exp > 0; exp--)
+   for (int exp=4; exp > 0; exp--)
       {
       size = 1 << exp;
       for (auto iterator = _dataSnippetList.begin(); iterator != _dataSnippetList.end(); ++iterator)
@@ -3766,7 +3618,6 @@ void OMR::X86::CodeGenerator::dumpDataSnippets(TR::FILE *outFile)
       }
    }
 
-#endif
 #if defined(DEBUG)
 // Dump the instruction before FP register assignment to
 // reveal the virtual registers prior to stack register assignment.

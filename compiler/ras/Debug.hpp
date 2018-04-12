@@ -118,7 +118,6 @@ namespace TR { class X86PaddingInstruction;                }
 namespace TR { class X86AlignmentInstruction;              }
 namespace TR { class X86BoundaryAvoidanceInstruction;      }
 namespace TR { class X86PatchableCodeAlignmentInstruction; }
-namespace TR { class X86RestoreVMThreadInstruction;        }
 namespace TR { class X86FenceInstruction;                  }
 namespace TR { class X86VirtualGuardNOPInstruction;        }
 namespace TR { class X86ImmInstruction;                    }
@@ -750,7 +749,6 @@ public:
    void print(TR::FILE *, TR::X86AlignmentInstruction *);
    void print(TR::FILE *, TR::X86BoundaryAvoidanceInstruction *);
    void print(TR::FILE *, TR::X86PatchableCodeAlignmentInstruction *);
-   void print(TR::FILE *, TR::X86RestoreVMThreadInstruction *);
    void print(TR::FILE *, TR::X86FenceInstruction *);
 #ifdef J9_PROJECT_SPECIFIC
    void print(TR::FILE *, TR::X86VirtualGuardNOPInstruction *);
@@ -800,7 +798,6 @@ public:
    int32_t printIntConstant(TR::FILE *pOutFile, int64_t value, int8_t radix, TR_RegisterSizes size = TR_WordReg, bool padWithZeros = false);
    int32_t printDecimalConstant(TR::FILE *pOutFile, int64_t value, int8_t width, bool padWithZeros);
    int32_t printHexConstant(TR::FILE *pOutFile, int64_t value, int8_t width, bool padWithZeros);
-   int32_t printFPConstant(TR::FILE *pOutFile, void *value, int8_t numBits, bool printAsBytes = false);
    void printInstructionComment(TR::FILE *pOutFile, int32_t tabStops, TR::Instruction *instr);
    void printFPRegisterComment(TR::FILE *pOutFile, TR::Register *target, TR::Register *source);
    void printMemoryReferenceComment(TR::FILE *pOutFile, TR::MemoryReference *mr);

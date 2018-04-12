@@ -1,5 +1,5 @@
 <!--
-Copyright (c) 2016, 2017 IBM Corp. and others
+Copyright (c) 2016, 2018 IBM Corp. and others
 
 This program and the accompanying materials are made available under
 the terms of the Eclipse Public License 2.0 which accompanies this
@@ -24,6 +24,7 @@ SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-excepti
 [![Appveyor Status](https://ci.appveyor.com/api/projects/status/github/eclipse/omr?svg=true&branch=master)](https://ci.appveyor.com/project/eclipsewebmaster/omr)
 [![Build-linux_390-64 Status](https://ci.eclipse.org/omr/job/Build-linux_390-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-linux_390-64/)
 [![Build-linux_ppc-64_le_gcc Status](https://ci.eclipse.org/omr/job/Build-linux_ppc-64_le_gcc/badge/icon)](https://ci.eclipse.org/omr/job/Build-linux_ppc-64_le_gcc/)
+[![Build-aix_ppc-64 Status](https://ci.eclipse.org/omr/job/Build-aix_ppc-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-aix_ppc-64/)
 
 What Is Eclipse OMR?
 ====================
@@ -35,7 +36,7 @@ and operating system platforms.
 Our current components are:
 
 * **`gc`**:             Garbage collection framework for managed heaps
-* **`compiler`**:       Components for builing compiler technology, such as JIT
+* **`compiler`**:       Components for building compiler technology, such as JIT
                         compilers.
 * **`jitbuilder`**:     An easy to use high level abstraction on top of the
                         compiler technology.

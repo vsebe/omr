@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015, 2017 IBM Corp. and others
+ * Copyright (c) 2015, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -26,28 +26,33 @@ ClassUDT::ClassUDT(size_t size, bool isClass, unsigned int lineNumber)
 {
 }
 
-ClassUDT::~ClassUDT() {};
-
-string
-ClassUDT::getSymbolKindName()
+ClassUDT::~ClassUDT()
 {
-	return _isClass ? "class" : "struct";
+}
+
+const string &
+ClassUDT::getSymbolKindName() const
+{
+	static const string classKind("class");
+	static const string structKind("struct");
+
+	return _isClass ? classKind : structKind;
 }
 
 DDR_RC
-ClassUDT::acceptVisitor(TypeVisitor const &visitor)
+ClassUDT::acceptVisitor(const TypeVisitor &visitor)
 {
-	return visitor.visitType(this);
+	return visitor.visitClass(this);
 }
 
 bool
-ClassUDT::operator==(Type const & rhs) const
+ClassUDT::operator==(const Type & rhs) const
 {
 	return rhs.compareToClass(*this);
 }
 
 bool
-ClassUDT::compareToClass(ClassUDT const &other) const
+ClassUDT::compareToClass(const ClassUDT &other) const
 {
 	return compareToClasstype(other)
 		&& (*_superClass == *other._superClass);

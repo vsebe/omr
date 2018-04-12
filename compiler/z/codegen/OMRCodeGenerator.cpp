@@ -564,7 +564,7 @@ OMR::Z::CodeGenerator::CodeGenerator()
       _processorInfo.disableArch(TR_S390ProcessorInfo::TR_z196);
       }
 
-   if (comp->getOption(TR_DisableZHelix))
+   if (comp->getOption(TR_DisableZEC12))
       {
       _processorInfo.disableArch(TR_S390ProcessorInfo::TR_zEC12);
       }
@@ -668,7 +668,6 @@ OMR::Z::CodeGenerator::CodeGenerator()
    if (!comp->getOption(TR_DisableArraySetOpts))
       {
       self()->setSupportsArraySet();
-      self()->setSupportsArraySetToZero();
       }
    self()->setSupportsArrayCmp();
    self()->setSupportsArrayCmpSign();
@@ -5858,7 +5857,7 @@ TR_S390Peephole::perform()
 
                   bool instrMatch =
                         (cast_na->getFirstRegister() == cast_nb->getFirstRegister()) &&
-                        (!cast_na->hasMask()) && (!cast_nb->hasMask()) &&
+                        (!cast_na->hasMaskImmediate()) && (!cast_nb->hasMaskImmediate()) &&
                         (cast_na->getMemoryReference() == NULL) && (cast_nb->getMemoryReference() == NULL);
 
                   if (instrMatch)

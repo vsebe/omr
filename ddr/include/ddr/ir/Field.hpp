@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015, 2017 IBM Corp. and others
+ * Copyright (c) 2015, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -22,21 +22,15 @@
 #ifndef FIELD_HPP
 #define FIELD_HPP
 
-#include "ddr/config.hpp"
-
-#include "ddr/std/string.hpp"
-
 #include "ddr/ir/Members.hpp"
 #include "ddr/ir/Modifiers.hpp"
-#include "ddr/ir/Type.hpp"
 
-using std::string;
+class Type;
 
 class Field : public Members
 {
 public:
 	Type *_fieldType;
-	size_t _sizeOf;
 	size_t _offset;
 	Modifiers _modifiers;
 	size_t _bitField;
@@ -44,7 +38,7 @@ public:
 
 	Field();
 
-	string getTypeName();
+	const std::string &getTypeName() const;
 };
 
 #endif /* FIELD_HPP */
