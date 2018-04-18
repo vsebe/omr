@@ -828,6 +828,12 @@ OMR::Z::CodeGenerator::CodeGenerator()
    self()->setAccessStaticsIndirectly(true);
    }
 
+bool
+OMR::Z::CodeGenerator::getSupportsBitPermute()
+   {
+   return TR::Compiler->target.is64Bit() || self()->use64BitRegsOn32Bit();
+   }
+
 TR_GlobalRegisterNumber
 OMR::Z::CodeGenerator::getGlobalHPRFromGPR (TR_GlobalRegisterNumber n)
    {
@@ -10443,7 +10449,7 @@ bool OMR::Z::CodeGenerator::nodeRequiresATemporary(TR::Node *node)
          return true;
          }
       }
-   else if (node->getOpCodeValue() == TR::pddiv || node->getOpCodeValue() == TR::pddivSelect)
+   else if (node->getOpCodeValue() == TR::pddiv)
       {
       // The DP instruction places the quotient left aligned in the result field so a temporary must be used.
       if (self()->traceBCDCodeGen())
