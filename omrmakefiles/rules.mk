@@ -369,6 +369,7 @@ endif
 
 # C
 %$(OBJEXT): %.c
+	$(CC) --version | head -1
 	$(COMPILE_C_COMMAND)
 ifeq (linux_ztpf,$(OMR_HOST_OS))
 	tpfobjpp -O ONotApplicable -g gNotApplicable $@
@@ -376,6 +377,7 @@ endif
 
 # C++
 %$(OBJEXT): %.cpp
+	$(CXX) --version | head -1
 	$(COMPILE_CXX_COMMAND)
 ifeq (linux_ztpf,$(OMR_HOST_OS))
 	tpfobjpp -O ONotApplicable -g gNotApplicable $@
