@@ -2276,7 +2276,7 @@ bool TR_CompactNullChecks::replaceNullCheckIfPossible(TR::Node *cursorNode, TR::
       if (isEquivalent)
          {
          bool canBeRemoved = true; //comp()->cg()->canNullChkBeImplicit(cursorNode);
-         if (TR::comp()->getOptions()->getOption(TR_DisableTraps) ||
+         if (TR::comp()->getOption(TR_DisableTraps) ||
              TR::Compiler->om.offsetOfObjectVftField() >= comp()->cg()->getNumberBytesReadInaccessible())
            canBeRemoved = false;
 
@@ -3386,6 +3386,45 @@ int32_t TR_EliminateRedundantGotos::process(TR::TreeTop *startTree, TR::TreeTop 
          //////dumpOptDetails(comp(), "Contains trees other than gotos when at block number : %d\n", block->getNumber());
          }
 
+      bool blockIsRegionEntry = false;
+      TR_Structure *rootStructure = cfg->getStructure();
+      TR_RegionStructure *blockRegion = NULL;
+      if (rootStructure != NULL)
+         {
+         blockRegion = block->getParentStructureIfExists(cfg);
+         blockIsRegionEntry =
+            blockRegion != NULL && blockRegion->getNumber() == block->getNumber();
+         }
+
+      bool manuallyFixStructure = blockIsRegionEntry;
+
+      if (!block->isExtensionOfPreviousBlock())
+         {
+         // Check register dependencies
+         TR::TreeTop *lastTT = emptyBlock ? block->getExit() : lastNonFenceTree;
+         TR::Node *exit = lastTT->getNode();
+         if (exit->getNumChildren() > 0)
+            {
+            TR::Node *exitDeps = exit->getChild(0);
+
+            // If every child of the outgoing GlRegDeps is a register load,
+            // then the outgoing registers agree with the incoming registers,
+            // because each register load must appear first under BBStart.
+            bool depsOK = true;
+            for (int i = 0; i < exitDeps->getNumChildren(); i++)
+               {
+               if (!exitDeps->getChild(i)->getOpCode().isLoadReg())
+                  {
+                  depsOK = false;
+                  break;
+                  }
+               }
+
+            if (!depsOK)
+               continue;
+            }
+         }
+
       // This block consists of just a goto with maybe an async check as well.
       //
       // Look at the predecessors and see if they can all absorb the goto
@@ -3393,36 +3432,34 @@ int32_t TR_EliminateRedundantGotos::process(TR::TreeTop *startTree, TR::TreeTop 
       if (block->getPredecessors().empty())
          continue;
 
-      bool gotoBlockRemovable = true;
-      TR::Block *destBlock = block->getSuccessors().front()->getTo()->asBlock();
-      auto inEdge = block->getPredecessors().begin();
-      while (inEdge != block->getPredecessors().end())
-         {
-         if (((*inEdge)->getFrom() == cfg->getStart()) || ((*inEdge)->getFrom() == block))
-            {
-            gotoBlockRemovable = false;
-            break;
-            }
+      if (block->isLoopInvariantBlock())
+         continue;
 
-         TR::TreeTop *tt = toBlock((*inEdge)->getFrom())->getLastRealTreeTop();
+      TR::Block *destBlock = block->getSuccessors().front()->getTo()->asBlock();
+      if (destBlock == block)
+         continue; // No point trying to "update" predecessors
+
+      TR::CFGEdgeList fixablePreds(comp()->trMemory()->currentStackRegion());
+      auto preds = block->getPredecessors();
+      for (auto inEdge = preds.begin(); inEdge != preds.end(); ++inEdge)
+         {
+         if ((*inEdge)->getFrom() == cfg->getStart())
+            continue;
+
+         TR::Block *pred = toBlock((*inEdge)->getFrom());
+         TR::TreeTop *tt = pred->getLastRealTreeTop();
          TR::Node *ttNode = tt->getNode();
          if(ttNode->getOpCodeValue() == TR::treetop)
              ttNode = ttNode->getFirstChild();
 
          if (tt->getNode()->getOpCode().isJumpWithMultipleTargets() ||
              tt->getNode()->isTheVirtualGuardForAGuardedInlinedCall())
-            {
-            gotoBlockRemovable = false;
-            break;
-            }
+            continue;
 
          if (!emptyBlock &&
              (!tt->getNode()->getOpCode().isBranch() ||
                tt->getNode()->getBranchDestination() != block->getEntry()))
-            {
-            gotoBlockRemovable = false;
-            break;
-            }
+            continue;
 
          if (tt->getNode()->getOpCode().isBranch()  &&
              ((tt->getNode()->getBranchDestination() != block->getEntry()) &&
@@ -3430,42 +3467,43 @@ int32_t TR_EliminateRedundantGotos::process(TR::TreeTop *startTree, TR::TreeTop 
                !(destBlock->getSuccessors().size() == 1) ||
                !(destBlock->getPredecessors().size() == 1) ||
                !destBlock->getLastRealTreeTop()->getNode()->getOpCode().isBranch())))
-            {
-            gotoBlockRemovable = false;
-            break;
-            }
+            continue;
 
          // PR 65144: The transformation logic later in this loop doesn't cope
          // with a branch whose target is also the fallthrough block.  Protect
          // against that case, whether it appears in the incoming trees, or
          // arises after an earlier transformation by this very loop.
          //
-         TR::Block *pred = toBlock((*inEdge)->getFrom());
          if (  tt->getNode()->getOpCode().isBranch()
             && tt->getNode()->getBranchDestination() == block->getEntry()
             && pred->getNextBlock() == block)
-            {
-            gotoBlockRemovable = false;
-            break;
-            }
+            continue;
 
          //if (asyncMessagesFlag && (tt->getNode()->getOpCodeValue() != TR::Goto))
          //   {
          //   gotoBlockRemovable = false;
          //   break;
          //   }
-         //
-         ++inEdge;
+
+         fixablePreds.push_front(*inEdge);
          }
-      if (!gotoBlockRemovable)
+
+      if (fixablePreds.empty())
          continue;
 
-
-      if (block->getStructureOf() && block->getStructureOf()->isLoopInvariantBlock())
-         continue;
+      if (fixablePreds.size() < preds.size())
+         {
+         // Not all predecessors can be adjusted, so block cannot be removed.
+         if (emptyBlock || manuallyFixStructure)
+            continue;
+         }
 
       if (containsTreesOtherThanGoto)
          {
+         if (block->getEntry()->getNode()->getNumChildren() > 0
+             || destBlock->getEntry()->getNode()->getNumChildren() > 0)
+            continue; // to move the trees we would need to deal with regdeps
+
          if (!(destBlock->getPredecessors().size() == 1))
             continue;
 
@@ -3509,9 +3547,7 @@ int32_t TR_EliminateRedundantGotos::process(TR::TreeTop *startTree, TR::TreeTop 
             !performTransformation(comp(), "%sEliminating goto at the end of block_%d with BBStart %p\n", optDetailString(), block->getNumber(), block->getEntry()->getNode()))
         continue;
 
-      TR_Structure *rootStructure     = cfg->getStructure();
-      TR_RegionStructure *blockRegion = block->getParentStructureIfExists(cfg);
-      if (rootStructure && blockRegion && blockRegion->getNumber() == block->getNumber())
+      if (manuallyFixStructure)
          {
          // We are removing a goto block that is the head of a structure region.
          // Attempt to remove the goto block will result in the collapse of blockStrucutre
@@ -3562,39 +3598,7 @@ int32_t TR_EliminateRedundantGotos::process(TR::TreeTop *startTree, TR::TreeTop 
 
          // Fixup all the CFGEdges to goto destBlock
          //
-         for (auto edge = block->getPredecessors().begin(); edge != block->getPredecessors().end();)
-            {
-            TR::CFGEdge* current = *(edge++);
-            TR::Block *predBlock = current->getFrom()->asBlock();
-            requestOpt(OMR::treeSimplification, true, predBlock);
-
-            if (asyncMessagesFlag && comp()->getHCRMode() != TR::osr)
-               placeAsyncCheckBefore(predBlock->getLastRealTreeTop());
-
-            if (predBlock->getLastRealTreeTop()->getNode()->getOpCode().isBranch() &&
-                predBlock->getLastRealTreeTop()->getNode()->getBranchDestination() == block->getEntry())
-                predBlock->changeBranchDestination(destBlock->getEntry(), cfg);
-            else
-                predBlock->redirectFlowToNewDestination(comp(), current, destBlock, false);
-
-            if (predBlock->getNextBlock() == destBlock)
-               {
-               TR::Node *last = predBlock->getLastRealTreeTop()->getNode();
-               if (last->getOpCodeValue() == TR::Goto)
-                  {
-                  int32_t i = 0;
-                  while (i < last->getNumChildren())
-                     {
-                     last->getChild(i)->recursivelyDecReferenceCount();
-                     i++;
-                     }
-
-                  TR::TreeTop *prev = predBlock->getLastRealTreeTop()->getPrevTreeTop();
-                  TR::TreeTop *next = predBlock->getLastRealTreeTop()->getNextTreeTop();
-                  prev->join(next);
-                  }
-               }
-            }
+         redirectPredecessors(block, destBlock, fixablePreds, emptyBlock, asyncMessagesFlag);
 
          if (!cannotRepairStructure)
             {
@@ -3614,47 +3618,7 @@ int32_t TR_EliminateRedundantGotos::process(TR::TreeTop *startTree, TR::TreeTop 
          {
          // Okay to allow automatic structure fixup (if it exists)
          //
-         for (auto inEdge = block->getPredecessors().begin(); inEdge != block->getPredecessors().end();)
-            {
-            TR::CFGEdge* current = *(inEdge++);
-            TR::Block *prevBlock = toBlock(current->getFrom());
-
-            if (asyncMessagesFlag && comp()->getHCRMode() != TR::osr)
-               placeAsyncCheckBefore(prevBlock->getLastRealTreeTop());
-
-            if (prevBlock->getLastRealTreeTop()->getNode()->getOpCode().isBranch() &&
-                prevBlock->getLastRealTreeTop()->getNode()->getBranchDestination() == block->getEntry())
-               {
-               prevBlock->changeBranchDestination(destBlock->getEntry(), cfg);
-               }
-            else
-               {
-               prevBlock->redirectFlowToNewDestination(comp(), current, destBlock, false);
-               }
-
-            if (prevBlock->getNextBlock() == destBlock)
-               {
-               TR::Node *last = prevBlock->getLastRealTreeTop()->getNode();
-               if (last->getOpCodeValue() == TR::Goto)
-                  {
-                  int32_t i = 0;
-                  while (i < last->getNumChildren())
-                     {
-                     last->getChild(i)->recursivelyDecReferenceCount();
-                     i++;
-                     }
-
-                  TR::TreeTop *prev = prevBlock->getLastRealTreeTop()->getPrevTreeTop();
-                  TR::TreeTop *next = prevBlock->getLastRealTreeTop()->getNextTreeTop();
-                  prev->join(next);
-                  }
-               }
-            }
-
-         if (!emptyBlock)
-            optimizer()->prepareForTreeRemoval(lastNonFenceTree);
-
-         cfg->removeNode(block);
+         redirectPredecessors(block, destBlock, fixablePreds, emptyBlock, asyncMessagesFlag);
          }
 
       // Place an asynccheck as the first treetop of the successor, if there was one in the removed block
@@ -3670,6 +3634,223 @@ int32_t TR_EliminateRedundantGotos::process(TR::TreeTop *startTree, TR::TreeTop 
       }
 
    return 0; // actual cost
+   }
+
+void TR_EliminateRedundantGotos::redirectPredecessors(
+   TR::Block *block,
+   TR::Block *destBlock,
+   const TR::CFGEdgeList &preds,
+   bool emptyBlock,
+   bool asyncMessagesFlag)
+   {
+   TR::CFG *cfg = comp()->getFlowGraph();
+
+   TR::Node *regdepsToMove = NULL;
+   TR::Node *newRegdepParent = NULL;
+
+   // In case we're deleting an empty block at the beginning or end of a larger
+   // extended block, take care to move any incoming regdeps forward, or
+   // outgoing ones backward, to ensure they aren't lost.
+   bool regdepsAreOutgoing = block->isExtensionOfPreviousBlock();
+   if (regdepsAreOutgoing)
+      {
+      TR::Node *exitNode = block->getExit()->getNode();
+      if (exitNode->getNumChildren() > 0)
+         {
+         // block is the last in its extended block. It must be empty because
+         // it has only one predecessor, and the predecessor falls through into
+         // block. Predecessor edges that don't branch to block are rejected
+         // unless emptyBlock holds.
+         TR_ASSERT_FATAL(
+            emptyBlock,
+            "expected block_%d to be empty\n",
+            block->getNumber());
+
+         regdepsToMove = exitNode->getChild(0);
+         exitNode->setChild(0, NULL);
+         exitNode->setNumChildren(0);
+         newRegdepParent = toBlock(preds.front()->getFrom())->getExit()->getNode();
+         }
+      }
+   else
+      {
+      TR::Node *entryNode = block->getEntry()->getNode();
+      if (emptyBlock &&
+          entryNode->getNumChildren() > 0 &&
+          destBlock->isExtensionOfPreviousBlock())
+         {
+         regdepsToMove = entryNode->getChild(0);
+         entryNode->setChild(0, NULL);
+         entryNode->setNumChildren(0);
+         newRegdepParent = destBlock->getEntry()->getNode();
+         }
+      }
+
+   if (regdepsToMove != NULL)
+      {
+      TR_ASSERT_FATAL(
+         newRegdepParent->getNumChildren() == 0,
+         "n%un %s has unexpected register dependencies\n",
+         newRegdepParent->getGlobalIndex(),
+         newRegdepParent->getOpCode().getName());
+
+      newRegdepParent->setNumChildren(1);
+      newRegdepParent->setChild(0, regdepsToMove);
+      }
+
+   // Update predecessors now that the regdeps have been moved as appropriate
+   for (auto edge = preds.begin(); edge != preds.end(); ++edge)
+      {
+      TR::CFGEdge* current = *edge;
+      TR::Block *predBlock = toBlock(current->getFrom());
+      requestOpt(OMR::treeSimplification, true, predBlock);
+
+      if (asyncMessagesFlag && comp()->getHCRMode() != TR::osr)
+         placeAsyncCheckBefore(predBlock->getLastRealTreeTop());
+
+      TR::TreeTop *predExitTree = NULL;
+      if (predBlock->getLastRealTreeTop()->getNode()->getOpCode().isBranch() &&
+          predBlock->getLastRealTreeTop()->getNode()->getBranchDestination() == block->getEntry())
+         {
+         predBlock->changeBranchDestination(
+            destBlock->getEntry(),
+            cfg,
+            /* callerFixesRegdeps = */ true);
+         predExitTree = predBlock->getLastRealTreeTop();
+         }
+      else
+         {
+         predBlock->redirectFlowToNewDestination(comp(), current, destBlock, false);
+         predExitTree = predBlock->getExit();
+         }
+
+      if (regdepsToMove == NULL && block->getEntry()->getNode()->getNumChildren() > 0)
+         {
+         fixPredecessorRegDeps(predExitTree->getNode(), destBlock);
+         }
+      else
+         {
+         TR::DebugCounter::incStaticDebugCounter(comp(),
+            "redundantGotoElimination.regDeps/none");
+         }
+
+      if (predBlock->getNextBlock() == destBlock)
+         {
+         TR::Node *last = predBlock->getLastRealTreeTop()->getNode();
+         if (last->getOpCodeValue() == TR::Goto)
+            {
+            TR::Node *exit = predBlock->getExit()->getNode();
+            TR_ASSERT_FATAL(
+               exit->getNumChildren() == 0,
+               "n%un BBEnd has GlRegDeps even though it follows goto\n",
+               exit->getGlobalIndex());
+
+            if (last->getNumChildren() > 0)
+               {
+               TR_ASSERT_FATAL(
+                  last->getNumChildren() == 1,
+                  "n%un goto has %d children\n",
+                  last->getGlobalIndex(),
+                  last->getNumChildren());
+
+               exit->setNumChildren(1);
+               exit->setChild(0, last->getChild(0));
+               last->setChild(0, NULL);
+               last->setNumChildren(0);
+               }
+
+            TR::TreeTop *prev = predBlock->getLastRealTreeTop()->getPrevTreeTop();
+            TR::TreeTop *next = predBlock->getLastRealTreeTop()->getNextTreeTop();
+            prev->join(next);
+            }
+         }
+      }
+   }
+
+void TR_EliminateRedundantGotos::fixPredecessorRegDeps(
+   TR::Node *regdepsParent,
+   TR::Block *destBlock)
+   {
+   const int childIndex = regdepsParent->getNumChildren() - 1;
+   TR_ASSERT_FATAL(
+      childIndex >= 0,
+      "n%un should have at least one child "
+      "because it leads to a block with incoming regdeps\n",
+      regdepsParent->getGlobalIndex());
+
+   TR::Node *regdeps = regdepsParent->getChild(childIndex);
+   TR_ASSERT_FATAL(
+      regdeps->getOpCodeValue() == TR::GlRegDeps,
+      "expected n%un to be a GlRegDeps\n",
+      regdeps->getGlobalIndex());
+
+   TR::Node *destEntry = destBlock->getEntry()->getNode();
+   if (destEntry->getNumChildren() == 0)
+      {
+      // No regdeps necessary
+      TR::DebugCounter::incStaticDebugCounter(comp(),
+         TR::DebugCounter::debugCounterName(comp(),
+            "redundantGotoElimination.regDeps/wiped/%s/(%s)/block_%d",
+            comp()->getHotnessName(comp()->getMethodHotness()),
+            comp()->signature(),
+            destBlock->getNumber()));
+      regdeps->recursivelyDecReferenceCount();
+      regdepsParent->setChild(childIndex, NULL);
+      regdepsParent->setNumChildren(childIndex);
+      return;
+      }
+
+   TR::Node *newReceivingRegdeps = destEntry->getChild(0);
+   TR_ASSERT_FATAL(
+      newReceivingRegdeps->getOpCodeValue() == TR::GlRegDeps,
+      "expected n%un child of n%un BBStart <block_%d> to be GlRegDeps\n",
+      newReceivingRegdeps->getGlobalIndex(),
+      destEntry->getGlobalIndex(),
+      destBlock->getNumber());
+
+   if (regdeps->getNumChildren() == newReceivingRegdeps->getNumChildren())
+      {
+      TR::DebugCounter::incStaticDebugCounter(comp(),
+         "redundantGotoElimination.regDeps/retained");
+      }
+   else
+      {
+      TR::DebugCounter::incStaticDebugCounter(comp(),
+         TR::DebugCounter::debugCounterName(comp(),
+            "redundantGotoElimination.regDeps/dropped/%s/(%s)/block_%d",
+            comp()->getHotnessName(comp()->getMethodHotness()),
+            comp()->signature(),
+            destBlock->getNumber()));
+      }
+
+   int remainingDeps = 0;
+   for (int i = 0; i < regdeps->getNumChildren(); i++)
+      {
+      TR::Node *dep = regdeps->getChild(i);
+      auto reg = dep->getGlobalRegisterNumber();
+      bool needed = false;
+      for (int j = 0; j < newReceivingRegdeps->getNumChildren(); j++)
+         {
+         if (newReceivingRegdeps->getChild(j)->getGlobalRegisterNumber() == reg)
+            {
+            needed = true;
+            break;
+            }
+         }
+
+      if (needed)
+         regdeps->setChild(remainingDeps++, dep);
+      else
+         dep->recursivelyDecReferenceCount();
+      }
+
+   TR_ASSERT_FATAL(
+      remainingDeps == newReceivingRegdeps->getNumChildren(),
+      "n%un: bad number %d of remaining regdeps\n",
+      regdeps->getGlobalIndex(),
+      remainingDeps);
+
+   regdeps->setNumChildren(remainingDeps);
    }
 
 const char *
@@ -4097,11 +4278,9 @@ TR_ProfiledNodeVersioning::optDetailString() const throw()
    return "O^O PROFILED NODE VERSIONING: ";
    }
 
-TR_Rematerialization::TR_Rematerialization(TR::OptimizationManager *manager, bool onlyLongReg)
+TR_Rematerialization::TR_Rematerialization(TR::OptimizationManager *manager)
    : TR::Optimization(manager), _prefetchNodes(trMemory())
-   {
-   setOnlyRunLongRegHeuristic(onlyLongReg);
-   }
+   {}
 
 void TR_Rematerialization::rematerializeSSAddress(TR::Node *parent, int32_t addrChildIndex)
    {
@@ -4372,12 +4551,6 @@ void TR_Rematerialization::prePerformOnBlocks()
    {
    _counter = 0;
    _curBlock = NULL;
-
-   if (shouldOnlyRunLongRegHeuristic())
-      {
-      setLongRegDecision(false);
-      initLongRegData();
-      }
    }
 
 class TR_RematAdjustments
@@ -4465,19 +4638,6 @@ TR::Node * rematerializeNode(TR::Compilation * comp, TR::Node * node)
 
 int32_t TR_Rematerialization::process(TR::TreeTop *startTree, TR::TreeTop *endTree)
    {
-   if (shouldOnlyRunLongRegHeuristic())
-      {
-      makeEarlyLongRegDecision();
-      if (longRegDecisionMade())
-        return 0;
-      }
-
-   if (!shouldOnlyRunLongRegHeuristic())
-      {
-      if (debug("NRematerialization"))
-         return 0;
-      }
-
    _underGlRegDeps = false;
 
    vcount_t visitCount = comp()->incOrResetVisitCount();
@@ -4492,66 +4652,14 @@ int32_t TR_Rematerialization::process(TR::TreeTop *startTree, TR::TreeTop *endTr
       // Get information about this block
       //
       TR::Node *node = treeTop->getNode();
-      if (!shouldOnlyRunLongRegHeuristic())
-         rematerializeAddresses(node, treeTop, visitCount);
-      else
-         {
-         _curLongOps=0; //reset for this node
-         _curOps=0; //reset for this node
 
-         if (!(node->getOpCodeValue() == TR::BBStart  ||
-            node->getOpCodeValue() == TR::BBEnd  ||
-            node->getOpCodeValue() == TR::asynccheck))
-            {
-            if (performTransformation(comp(), "%s Counting ops for node [%p]\n", optDetailString(), node))
-               {
-               examineLongRegNode(node, comp()->getVisitCount(), false);
-               _numLongOps += _curLongOps;
-               _numOps += _curOps;
-               if (_curLongOps > 0)
-                  {
-                  int32_t nWeight = 1;
-                  bool isInLoop = (NULL != treeTop->getEnclosingBlock()->getStructureOf()->getContainingLoop());
-                  if (isInLoop)
-                     {
-                     TR_RegionStructure * region = treeTop->getEnclosingBlock()->getParentStructureIfExists(comp()->getFlowGraph());
-                     if (trace())
-                        traceMsg(comp(), "\tNode [%p] is in a loop\n", node);
-
-                     //calculate freq of exec (will take care of loops and nesting in loops)
-                     if (region)
-                        {
-                        _numLongLoopOps+=_curLongOps;
-                        _numLoopOps+=_curOps;
-
-                        region->calculateFrequencyOfExecution(&nWeight);
-                        int8_t level = getLoopNestingLevel(nWeight);
-
-                        // add to tally of level
-                        if (level == 5)
-                           _numLongNestedLoopOps[level-1] += _curLongOps*2;
-                        else
-                           _numLongNestedLoopOps[level] += _curLongOps;
-
-                        if (trace())
-                           traceMsg(comp(), "\tLoop node [%p] has %d longs at level %d\n", node, _curLongOps, level);
-
-                        }
-                     }
-                  }
-               }
-            }
-         }
+      rematerializeAddresses(node, treeTop, visitCount);
       }
 
-   if (!shouldOnlyRunLongRegHeuristic())
-      {
-      if ((!cg()->doRematerialization()) &&
-          !comp()->containsBigDecimalLoad() &&
-          !comp()->getSymRefTab()->findPrefetchSymbol())
-         return 0;
-      }
-
+   if ((!cg()->doRematerialization()) &&
+       !comp()->containsBigDecimalLoad() &&
+       !comp()->getSymRefTab()->findPrefetchSymbol())
+      return 0;
 
    _nodeCount = comp()->getNodeCount();
    _heightArray = (int32_t *)trMemory()->allocateStackMemory(_nodeCount*sizeof(int32_t));
@@ -5014,51 +5122,6 @@ bool TR_Rematerialization::examineNode(TR::TreeTop *treeTop, TR::Node *parent, T
          isCallDirect = true;
       }
 
-   if (shouldOnlyRunLongRegHeuristic())
-      {
-      int32_t curLiveLongs=0;
-      int32_t nWeight=1;
-      if (isCall || isCallDirect)
-         {
-         ListIterator<TR::Node> nodesIt(&(state->_currentlyCommonedNodes));
-         TR::Node *commonedNode = NULL;
-         for (commonedNode = nodesIt.getFirst(); commonedNode; commonedNode = nodesIt.getNext())
-            {
-            if (commonedNode->uses64BitGPRs())
-               {
-               curLiveLongs++;
-               if (trace())
-                  traceMsg(comp(), "\tLocated long commoned node [%p]\n", commonedNode);
-               }
-            }
-            if (trace())
-               traceMsg(comp(), "\tCall node [%p] has %d live longs\n", node, curLiveLongs);
-
-            bool isInLoop = (NULL != treeTop->getEnclosingBlock()->getStructureOf()->getContainingLoop());
-            if (isInLoop)
-               {
-               TR_RegionStructure * region = NULL;
-               region = treeTop->getEnclosingBlock()->getParentStructureIfExists(comp()->getFlowGraph());
-               if (trace())
-                  traceMsg(comp(), "\tCall node [%p] is in a loop\n", node);
-
-               //calculate freq of exec (will take care of loops and nesting in loops)
-               if (region)
-                  {
-                  region->calculateFrequencyOfExecution(&nWeight);
-                  int8_t level = getLoopNestingLevel(nWeight)+1;
-                  if (trace())
-                     traceMsg(comp(), "\tCall node [%p] in loop with nesting=%d\n", node, level);
-                  curLiveLongs*=2*level;
-                  if (trace())
-                     traceMsg(comp(), "\tCall node [%p] in loop weighted live longs=%d\n", node, curLiveLongs);
-                  }
-               }
-         //add this node's commoned live long contribution
-         _numCallLiveLongs+=curLiveLongs;
-         }
-      }
-
    if (isCall ||
        isSimilarToCall)
       {
@@ -5125,61 +5188,47 @@ bool TR_Rematerialization::examineNode(TR::TreeTop *treeTop, TR::Node *parent, T
          }
        }
 
-
-    if (!shouldOnlyRunLongRegHeuristic())
+    if (trace())
        {
-       // need to consider restricted registers pressure
-       int8_t restrictedGPRNum = 0;
-
-
-       if (trace() && !shouldOnlyRunLongRegHeuristic())
-          {
-          traceMsg(comp(), "At node %p parent %p GPR pressure is %d (child adjust %d parent adjust %d) limit is %d\n", node, parent, numRegisters + childAdjustment + adjustments.adjustmentFromParent +restrictedGPRNum, childAdjustment, adjustments.adjustmentFromParent, (cg()->getMaximumNumbersOfAssignableGPRs()-1));
-          traceMsg(comp(), "candidate nodes size %d candidate loads size %d\n", state->_currentlyCommonedCandidates.getSize(), state->_currentlyCommonedLoads.getSize());
-          }
-
-       if ((!considerRegPressure ||
-           ((state->_currentlyCommonedNodes.getSize() + childAdjustment + adjustments.adjustmentFromParent + restrictedGPRNum) > (cg()->getMaximumNumbersOfAssignableGPRs() /* -1 */ ))) &&
-           (!state->_currentlyCommonedCandidates.isEmpty() || !state->_currentlyCommonedLoads.isEmpty()))
-          {
-          //_counter++;
-          //printf("Rematerializing in %s\n", comp()->signature());
-          rematerializeNode(treeTop, parent, node, visitCount, &state->_currentlyCommonedNodes, &state->_currentlyCommonedCandidates, &state->_parents, &state->_currentlyCommonedLoads, &state->_parentsOfCommonedLoads, &state->_loadsAlreadyVisited, &state->_loadsAlreadyVisitedThatCannotBeRematerialized, rematSpecialNode);
-          }
+       traceMsg(comp(), "At node %p parent %p GPR pressure is %d (child adjust %d parent adjust %d) limit is %d\n", node, parent, numRegisters + childAdjustment + adjustments.adjustmentFromParent, childAdjustment, adjustments.adjustmentFromParent, (cg()->getMaximumNumbersOfAssignableGPRs()-1));
+       traceMsg(comp(), "candidate nodes size %d candidate loads size %d\n", state->_currentlyCommonedCandidates.getSize(), state->_currentlyCommonedLoads.getSize());
        }
 
-      if (trace() && !shouldOnlyRunLongRegHeuristic() && node->getOpCode().isFloatingPoint())
+    if ((!considerRegPressure ||
+        ((state->_currentlyCommonedNodes.getSize() + childAdjustment + adjustments.adjustmentFromParent) > (cg()->getMaximumNumbersOfAssignableGPRs() /* -1 */ ))) &&
+        (!state->_currentlyCommonedCandidates.isEmpty() || !state->_currentlyCommonedLoads.isEmpty()))
+       {
+       //_counter++;
+       //printf("Rematerializing in %s\n", comp()->signature());
+       rematerializeNode(treeTop, parent, node, visitCount, &state->_currentlyCommonedNodes, &state->_currentlyCommonedCandidates, &state->_parents, &state->_currentlyCommonedLoads, &state->_parentsOfCommonedLoads, &state->_loadsAlreadyVisited, &state->_loadsAlreadyVisitedThatCannotBeRematerialized, rematSpecialNode);
+       }
+
+      if (trace() && node->getOpCode().isFloatingPoint())
       {
       traceMsg(comp(), "At node %p FPR pressure is %d (child adjust %d parent adjust %d) limit is %d\n", node, state->_currentlyCommonedFPNodes.getSize() + fpChildAdjustment + adjustments.fpAdjustmentFromParent, fpChildAdjustment, adjustments.fpAdjustmentFromParent, (cg()->getMaximumNumbersOfAssignableFPRs()-1));
       traceMsg(comp(), "candidate nodes size %d candidate loads size %d\n", state->_currentlyCommonedFPCandidates.getSize(), state->_currentlyCommonedFPLoads.getSize());
       }
 
-   if (!shouldOnlyRunLongRegHeuristic())
+   if ((!considerRegPressure || ((state->_currentlyCommonedFPNodes.getSize() + fpChildAdjustment + adjustments.fpAdjustmentFromParent) > cg()->getMaximumNumbersOfAssignableFPRs() /* -1 */)) &&
+      (!state->_currentlyCommonedFPCandidates.isEmpty() || !state->_currentlyCommonedFPLoads.isEmpty()))
       {
-      if ((!considerRegPressure || ((state->_currentlyCommonedFPNodes.getSize() + fpChildAdjustment + adjustments.fpAdjustmentFromParent) > cg()->getMaximumNumbersOfAssignableFPRs() /* -1 */)) &&
-         (!state->_currentlyCommonedFPCandidates.isEmpty() || !state->_currentlyCommonedFPLoads.isEmpty()))
-         {
-         //_counter++;
-         //printf("Rematerializing FP node in %s\n", comp()->signature());
-         rematerializeNode(treeTop, parent, node, visitCount, &state->_currentlyCommonedFPNodes, &state->_currentlyCommonedFPCandidates, &state->_fpParents, &state->_currentlyCommonedFPLoads, &state->_parentsOfCommonedFPLoads, &state->_fpLoadsAlreadyVisited, &state->_fpLoadsAlreadyVisitedThatCannotBeRematerialized, rematSpecialNode);
-         }
+      //_counter++;
+      //printf("Rematerializing FP node in %s\n", comp()->signature());
+      rematerializeNode(treeTop, parent, node, visitCount, &state->_currentlyCommonedFPNodes, &state->_currentlyCommonedFPCandidates, &state->_fpParents, &state->_currentlyCommonedFPLoads, &state->_parentsOfCommonedFPLoads, &state->_fpLoadsAlreadyVisited, &state->_fpLoadsAlreadyVisitedThatCannotBeRematerialized, rematSpecialNode);
       }
 
-      if (trace() && !shouldOnlyRunLongRegHeuristic() && node->getOpCode().isVector())
+      if (trace() && node->getOpCode().isVector())
       {
       traceMsg(comp(), "At node %p VSR pressure is %d (child adjust %d parent adjust %d) limit is %d\n", node, state->_currentlyCommonedVector128Nodes.getSize() + vector128ChildAdjustment + adjustments.vector128AdjustmentFromParent, vector128ChildAdjustment, adjustments.vector128AdjustmentFromParent, vector128ChildAdjustment + adjustments.vector128AdjustmentFromParent);
       traceMsg(comp(), "candidate nodes size %d candidate loads size %d\n", state->_currentlyCommonedVector128Candidates.getSize(), state->_currentlyCommonedVector128Loads.getSize());
       }
 
-   if (!shouldOnlyRunLongRegHeuristic())
+   if ((!considerRegPressure || ((state->_currentlyCommonedVector128Nodes.getSize() + vector128ChildAdjustment + adjustments.vector128AdjustmentFromParent) > cg()->getMaximumNumbersOfAssignableVRs() )) &&
+      (!state->_currentlyCommonedVector128Candidates.isEmpty() || !state->_currentlyCommonedVector128Loads.isEmpty()))
       {
-      if ((!considerRegPressure || ((state->_currentlyCommonedVector128Nodes.getSize() + vector128ChildAdjustment + adjustments.vector128AdjustmentFromParent) > cg()->getMaximumNumbersOfAssignableVRs() )) &&
-         (!state->_currentlyCommonedVector128Candidates.isEmpty() || !state->_currentlyCommonedVector128Loads.isEmpty()))
-         {
-         //_counter++;
-         //printf("Rematerializing Vector128 node in %s\n", comp()->signature());
-         rematerializeNode(treeTop, parent, node, visitCount, &state->_currentlyCommonedVector128Nodes, &state->_currentlyCommonedVector128Candidates, &state->_vector128Parents, &state->_currentlyCommonedVector128Loads, &state->_parentsOfCommonedVector128Loads, &state->_vector128LoadsAlreadyVisited, &state->_vector128LoadsAlreadyVisitedThatCannotBeRematerialized, rematSpecialNode);
-         }
+      //_counter++;
+      //printf("Rematerializing Vector128 node in %s\n", comp()->signature());
+      rematerializeNode(treeTop, parent, node, visitCount, &state->_currentlyCommonedVector128Nodes, &state->_currentlyCommonedVector128Candidates, &state->_vector128Parents, &state->_currentlyCommonedVector128Loads, &state->_parentsOfCommonedVector128Loads, &state->_vector128LoadsAlreadyVisited, &state->_vector128LoadsAlreadyVisitedThatCannotBeRematerialized, rematSpecialNode);
       }
 
    if ((node->getFutureUseCount() & 0x7fff) > 0)
@@ -5521,324 +5570,6 @@ void TR_Rematerialization::rematerializeNode(TR::TreeTop *treeTop, TR::Node *par
      parentsOfNodes->setListHead(parentsOfNodes->getListHead()->getNextElement());
      currentlyCommonedNodes->remove(nodeToBeRematerialized);
      }
-   }
-
-void TR_Rematerialization::calculateLongRegWeight(bool childOfCall, bool isLongNode)
-   {
-   _curOps++;
-   if (isLongNode)
-      {
-      _curLongOps++;
-      if (childOfCall)
-         _numLongOutArgs++;
-      }
-   }
-
-// return number of long ops on this node
-// keep track of total ops on this node as well
-void TR_Rematerialization::examineLongRegNode(TR::Node * node, vcount_t visitCount, bool childOfCall)
-   {
-   bool isLongNode = node->uses64BitGPRs();
-
-   //avoid infinite recursion but take into account that
-   //the node might be commoned... so treat the entire tree
-   //as one
-   if (node->getVisitCount() == visitCount)
-      {
-      calculateLongRegWeight(childOfCall, isLongNode);
-      return;
-      }
-
-   node->setVisitCount(visitCount);
-
-   // recurse on all children
-   bool isCall = (node->getOpCode().isCall() == true);
-   for (int i=0; i < node->getNumChildren(); i++)
-      {
-      //if we've seen a call already, don't modify the call param
-      //since we want it to propogate all the way down the call nodes
-      if (!childOfCall)
-         examineLongRegNode(node->getChild(i), visitCount, isCall);
-      else
-         examineLongRegNode(node->getChild(i), visitCount, childOfCall);
-      }
-
-   // return right away for a call node (already weighted the children)
-   if (isCall)
-      return;
-
-   //return base-weights
-   calculateLongRegWeight(childOfCall, isLongNode);
-   return;
-   }
-
-TR_LongRegAllocation::TR_LongRegAllocation(TR::OptimizationManager *manager)
-   : TR_Rematerialization(manager, true)
-   {}
-
-void TR_LongRegAllocation::printStats()
-   {
-   traceMsg(comp(), "\tLongRegStats\n");
-   traceMsg(comp(), "\t---------------------------\n");
-   traceMsg(comp(), "\tTotal number of long PARMS=%d\n", getNumLongParms());
-   traceMsg(comp(), "\tTotal number of ops=%d\n", getNumOps());
-   traceMsg(comp(), "\tTotal number of long ops=%d\n", getNumLongOps());
-   traceMsg(comp(), "\tTotal number of LOOP ops=%d\n", getNumLoopOps());
-   traceMsg(comp(), "\tTotal number of long LOOP ops=%d\n", getNumLongLoopOps());
-   for (int i=0; i < LONGREG_NEST; i++)
-      traceMsg(comp(), "\tTotal number of longs at nesting %d is %d\n", i, getNumLongAtNesting(i));
-   traceMsg(comp(), "\tTotal number of long OUTGOING args=%d\n", getNumLongOutArgs());
-   traceMsg(comp(), "\tTotal number of long LIVE=%d\n", getNumCallLiveLongs());
-   }
-
-void TR_LongRegAllocation::postPerformOnBlocks()
-   {
-   //if decision to use was already made, we're done
-   if (!longRegDecisionMade())
-      {
-      _numLongParms = getNumLongParms();
-
-      if (trace())
-         printStats();
-
-      //perform the decision making process here
-      makeLongRegDecision();
-      if (comp()->useLongRegAllocation())
-         {
-         if (trace())
-            traceMsg(comp(), "\tHeuristic decides to use 64-bit regs\n");
-         }
-      else
-         {
-         if (trace())
-            traceMsg(comp(), "\tHeuristic decides not to use 64-bit regs\n");
-         }
-      }
-   else
-      {
-      if (trace())
-         traceMsg(comp(), "\tEarly heuristic decision was made: %d\n", comp()->useLongRegAllocation());
-      }
-   }
-
-//#define LONGREG_TOTAL_LOW_WATERMARK 5
-#define LONGREG_TOTAL_HIGH_WATERMARK 10
-#define LONGREG_LOOP_LOW_WATERMARK 1
-#define LONGREG_LOOP_HIGH_WATERMARK 10
-#define LONGREG_LOOP_TOTAL_WATERMARK 10
-#define LONGREG_NESTING_LOW_WATERMARK 5
-#define LONGREG_NESTING_HIGH_WATERMARK 15
-#define LONGREG_LIVE_THRESHOLD 35
-#define LONGREG_SPILL_THRESHOLD 25
-#define LONGREG_ARG_THRESHOLD 10
-
-void TR_LongRegAllocation::makeLongRegDecision()
-   {
-
-   //TODO:  Incorporate num parms... not yet done so
-
-   int8_t testNum=0;
-   double numLongOps = (double)getNumLongOps();
-   double numOps = (double)getNumOps();
-   double numCallLiveLongs = (double)getNumCallLiveLongs();
-   double numLongOutArgs = (double)getNumLongOutArgs();
-
-   double totalRatio = 0.0;
-   double spillRatio = 0.0;
-   double argRatio = 0.0;
-
-   if (numOps > 0)
-      {
-      totalRatio = numLongOps/numOps*100;
-      }
-   if (numLongOps > 0)
-      {
-      spillRatio = numCallLiveLongs/numLongOps*100;
-      argRatio = numLongOutArgs/numLongOps*100;
-      }
-
-   if (trace())
-      {
-      traceMsg(comp(), "\ttotalRatio=%f\n",totalRatio);
-      traceMsg(comp(), "\tspillRatio=%f\n",spillRatio);
-      traceMsg(comp(), "\targRatio=%f\n",argRatio);
-      }
-
-   testNum++;
-   /*if (totalRatio < LONGREG_TOTAL_LOW_WATERMARK)
-      {
-      if(trace())
-         traceMsg(comp(), "\tFails test %d\n", testNum);
-      return ;
-      }
-   else*/ if (totalRatio > LONGREG_TOTAL_HIGH_WATERMARK &&
-            spillRatio < LONGREG_SPILL_THRESHOLD &&
-            argRatio < LONGREG_ARG_THRESHOLD)
-      {
-      if (trace())
-         traceMsg(comp(), "\tPasses test %d\n", testNum);
-      comp()->setUseLongRegAllocation(true);
-      return;
-      }
-
-   // At this point, we know we are between total watermarks OR
-   // we are above our spill threshhold OR
-   // we are above are argument ratio
-
-   double numLoopOps = (double)getNumLoopOps();
-   if (numLoopOps > 0)
-      {
-      double numLongLoopOps = (double)getNumLongLoopOps();
-      double loopRatio = numLongLoopOps/numLoopOps*100;
-
-      if (trace())
-         traceMsg(comp(), "\tloopRatio=%f\n", loopRatio);
-
-      testNum++;
-      if (loopRatio < LONGREG_LOOP_LOW_WATERMARK)
-         {
-         if(trace())
-            traceMsg(comp(), "\tFails test %d\n", testNum);
-         return;
-         }
-      else if (loopRatio > LONGREG_LOOP_HIGH_WATERMARK)
-         {
-         if (trace())
-            traceMsg(comp(), "\tPasses test %d\n", testNum);
-         comp()->setUseLongRegAllocation(true);
-         return;
-        }
-
-      // At this point, we know  we're between loop watermarks
-      // what percentage of the long ops in the method occur in loops?
-      double longLoopRatio = 0.0;
-      if (numLongOps > 0)
-         longLoopRatio = numLongLoopOps/numLongOps*100;
-      if (trace())
-         traceMsg(comp(), "\tTotalLongLoopRatio=%f\n", longLoopRatio);
-
-      testNum++;
-      if (longLoopRatio > LONGREG_LOOP_TOTAL_WATERMARK)
-         {
-         if (trace())
-            traceMsg(comp(), "\tPasses test %d\n", testNum);
-         comp()->setUseLongRegAllocation(true);
-         return;
-         }
-
-      // At this point, we want to see if we have more long ops
-      // at deeper loop nesting levels than at nesting level 1
-
-      if (getNumLongAtNesting(1) > 0)
-         {
-         double nestedLoopSum=0;
-         for (int8_t i=2 ; i < LONGREG_NEST; i++)
-            nestedLoopSum+=(double)getNumLongAtNesting(i);
-
-         double nestingRatio = nestedLoopSum/((double)getNumLongAtNesting(1))*100;
-
-         if (trace())
-            traceMsg(comp(), "\tnestingRatio=%f\n", nestingRatio);
-
-         testNum++;
-         if (nestingRatio < LONGREG_NESTING_LOW_WATERMARK)
-            {
-            if(trace())
-               traceMsg(comp(), "\tFails test %d\n", testNum);
-            return;
-            }
-         else if (nestingRatio > LONGREG_NESTING_HIGH_WATERMARK)
-            {
-         if (trace())
-            traceMsg(comp(), "\tPasses test %d\n", testNum);
-            comp()->setUseLongRegAllocation(true);
-            return;
-            }
-
-         // At this point, we are between are nesting loop watermarks
-         }
-      }
-
-   if (trace())
-      traceMsg(comp(), "\tDidn't pass any tests\n");
-
-   return;
-   }
-
-// calculate the cost of storing/restoring long params
-// coming in as register pairs
-int32_t TR_LongRegAllocation::getNumLongParms()
-   {
-   int32_t parms=0;
-
-   TR::ResolvedMethodSymbol   *methodSymbol = comp()->getJittedMethodSymbol();
-   ListIterator<TR::ParameterSymbol> parmIt(&methodSymbol->getParameterList());
-   for (TR::ParameterSymbol *p = parmIt.getFirst(); p; p = parmIt.getNext())
-      {
-      if (p->getDataType() == TR::Int64)
-         if (p->isParmPassedInRegister())
-            parms++;
-      }
-   return parms;
-   }
-
-const char *
-TR_LongRegAllocation::optDetailString() const throw()
-   {
-   return "O^O LONG REG ALLOCATION: ";
-   }
-
-int8_t TR_Rematerialization::getLoopNestingLevel(int32_t weight)
-   {
-   if (weight == 1)
-      weight=0;
-
-   switch(weight)
-      {
-      case 0: return 0;
-      case 10: return 1;
-      case 100: return 2;
-      case 1000: return 3;
-      case 10000: return 4;
-      default: return 5;
-      }
-   }
-
-void TR_Rematerialization::makeEarlyLongRegDecision()
-   {
-   if (comp()->getOptions()->getOption(TR_Disable64BitRegsOn32Bit) ||
-       !cg()->supportsLongRegAllocation() ||
-       !comp()->getJittedMethodSymbol()->mayHaveLongOps())
-      {
-      //keep the decision to false
-      setLongRegDecision(true);
-      dumpOptDetails(comp(), "\tEarly decision - not longRegAllocable\n");
-      return;
-      }
-
-   if (!comp()->getOptions()->getOption(TR_Disable64BitRegsOn32Bit) &&
-        comp()->getOptions()->getOption(TR_Disable64BitRegsOn32BitHeuristic))
-       {
-       comp()->setUseLongRegAllocation(true);
-       setLongRegDecision(true);
-       dumpOptDetails(comp(), "\tEarly decision - unconditionally longRegAllocable\n");
-       }
-   return;
-   }
-
-void TR_Rematerialization::initLongRegData()
-   {
-   comp()->setUseLongRegAllocation(false);
-   setLongRegDecision(false);
-
-   _numLongOps=0;
-   _numOps=0;
-   for (int8_t i =0; i < LONGREG_NEST; i++)
-      _numLongNestedLoopOps[i]=0;
-   _numLongLoopOps=0;
-   _numLoopOps=0;
-   _numLongOutArgs=0;
-   _numCallLiveLongs=0;
    }
 
 const char *
@@ -7261,9 +6992,15 @@ int32_t TR_InvariantArgumentPreexistence::perform()
 
                parmInfo.setSymbol(p);
                TR_OpaqueClassBlock *clazz = arg->getClass();
-               if (clazz)
+               TR_OpaqueClassBlock *clazzFromMethod = fe()->getClassFromSignature(sig, len, feMethod);
+               TR_ASSERT(!clazz ||
+                         !clazzFromMethod ||
+                         clazz == clazzFromMethod ||
+                         fe()->isInstanceOf(clazz, clazzFromMethod, true, true, true) == TR_yes,
+                         "Type from argInfo should be more specific clazz %p clazzFromMethod %p", clazz, clazzFromMethod);
+
+               if (classIsFixed)
                   {
-                  TR_ASSERT(classIsFixed, "assertion failure");
                   parmInfo.setClassIsFixed();
                   parmInfo.setClass(clazz);
                   parmInfo.setClassIsCurrentlyFinal();
@@ -7272,7 +7009,7 @@ int32_t TR_InvariantArgumentPreexistence::perform()
                      char *clazzSig = TR::Compiler->cls.classSignature(comp(), clazz, trMemory());
                      traceMsg(comp(), "PREX:        Parm %d class %p is currently final %s\n", index, clazz, clazzSig);
                      }
-                  if (clazz != fe()->getClassFromSignature(sig, len, feMethod))
+                  if (clazz != clazzFromMethod)
                      {
                      parmInfo.setClassIsRefined();
                      if (trace())
@@ -7281,18 +7018,12 @@ int32_t TR_InvariantArgumentPreexistence::perform()
                   }
                else
                   {
-                  clazz = fe()->getClassFromSignature(sig, len, feMethod);
+                  clazz = clazz ? clazz : clazzFromMethod;
                   if (clazz)
                      {
                      if (trace())
                         traceMsg(comp(), "PREX:        Parm %d class %p is %.*s\n", index, clazz, len, sig);
-                     if (classIsFixed)
-                        {
-                        parmInfo.setClassIsFixed();
-                        if (trace())
-                           traceMsg(comp(), "PREX:            Parm %d class is fixed\n", index);
-                        }
-                     if (classIsFixed || !fe()->classHasBeenExtended(clazz))
+                     if (!fe()->classHasBeenExtended(clazz))
                         {
                         parmInfo.setClassIsCurrentlyFinal();
                         if (trace())
@@ -7615,6 +7346,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       TR::SymbolReference *symRef = node->getSymbolReference();
       int32_t offset = symRef->getOffset();
       TR_ResolvedMethod *refinedMethod = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), receiverInfo.getClass(), offset);
+
 
       if (refinedMethod)
          {

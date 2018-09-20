@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -75,40 +75,12 @@
 
 namespace TR { class Block; }
 
-#if defined (J9ZOS390)
-#define GPR_EP " " GPR15 " "
-#else
-#define GPR_EP " " GPR4 " "
-#endif
-
-#define PRINT_START_COMMENT         true
-#define DO_NOT_PRINT_START_COMMENT  false
-
 #define OPCODE_SPACING           8
 
 extern const char *BranchConditionToNameMap[];
-extern const char *BranchConditionToNameMap_ForListing[];
 
 /** Need to use this since xlc doesn't seem to understand %hx modifier for fprintf */
 #define maskHalf(val) (0x0000FFFF & (val))
-
-/**
- * Given a value, return a string in binary, max bits = 64
- */
-static char *binary_string(int numbits, int val)
-   {
-   static char b[64];  int z=0,i=0;
-
-   if (numbits > 64) numbits=64;
-   memset(b,0,64);
-   z = 1 << (numbits-1);
-   for (i=0 ; z > 0; i++)
-     {
-     b[i] =  ((val & z) == z) ? '1' : '0';
-     z >>= 1;
-     }
-   return b;
-   }
 
 void
 TR_Debug::printPrefix(TR::FILE *pOutFile, TR::Instruction * instr)
@@ -517,9 +489,9 @@ TR_Debug::printAssocRegDirective(TR::FILE *pOutFile, TR::Instruction * instr)
    for (int j = 0; j < last; ++j)
       {
       TR::RegisterDependency * dependency = depGroup->getRegisterDependency(j);
-      if ((intptr_t) dependency->getRegister(_comp->cg()) > 0)
+      if ((intptr_t) dependency->getRegister() > 0)
          {
-         TR::Register * virtReg = dependency->getRegister(_comp->cg());
+         TR::Register * virtReg = dependency->getRegister();
          printS390RegisterDependency(pOutFile, virtReg, j+1, dependency->getRefsRegister(), dependency->getDefsRegister());
          }
       }
@@ -530,9 +502,9 @@ TR_Debug::printAssocRegDirective(TR::FILE *pOutFile, TR::Instruction * instr)
       for (int j = 0; j <= TR::RealRegister::LastHPR - TR::RealRegister::FirstHPR; ++j)
          {
          TR::RegisterDependency * dependency = depGroup->getRegisterDependency(j+last);
-         if ((intptr_t) dependency->getRegister(_comp->cg()) > 0)
+         if ((intptr_t) dependency->getRegister() > 0)
             {
-            TR::Register * virtReg = dependency->getRegister(_comp->cg());
+            TR::Register * virtReg = dependency->getRegister();
             printS390RegisterDependency(pOutFile, virtReg, j+TR::RealRegister::FirstHPR, dependency->getRefsRegister(), dependency->getDefsRegister());
             }
          }
@@ -589,7 +561,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390IEInstruction * instr)
    printPrefix(pOutFile, instr);
    trfprintf(pOutFile, "%-*s%d,%d", OPCODE_SPACING, getOpCodeName(&instr->getOpCode()), instr->getImmediateField1(), instr->getImmediateField2());
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -717,7 +689,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390RIEInstruction * instr)
 
       trfprintf(pOutFile, "%s(mask=0x%1x), ", brCondName, mask );
       }
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
 
    }
@@ -802,7 +774,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390LabelInstruction * instr)
          }
       }
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
 
    trfflush(pOutFile);
    }
@@ -824,7 +796,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390VirtualGuardNOPInstruction * instr)
       {
       trfprintf(pOutFile, ", labelTargetAddr=0x%p", labelLoc);
       }
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
 
    trfflush(pOutFile);
    }
@@ -866,7 +838,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390BranchInstruction * instr)
           }
        }
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -886,7 +858,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390BranchOnCountInstruction * instr)
       {
       trfprintf(pOutFile, ", labelTargetAddr=0x%p", labelLoc);
       }
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
 
    trfflush(pOutFile);
    }
@@ -922,7 +894,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390BranchOnIndexInstruction * instr)
       {
       trfprintf(pOutFile, ", labelTargetAddr=0x%p", labelLoc);
       }
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -951,7 +923,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390PseudoInstruction * instr)
 
    if (instr->getOpCodeValue() == TR::InstOpCode::DCB)
       {
-      
+
       if (static_cast<TR::S390DebugCounterBumpInstruction*>(instr)->getAssignableReg())
          {
          print(pOutFile, static_cast<TR::S390DebugCounterBumpInstruction*>(instr)->getAssignableReg());
@@ -960,7 +932,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390PseudoInstruction * instr)
          {
          trfprintf(pOutFile, "Spill Reg");
          }
-         
+
       trfprintf(pOutFile, ", Debug Counter Bump");
       }
 
@@ -1012,7 +984,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390PseudoInstruction * instr)
       trfprintf(pOutFile, "; DC <0x%llX>", instr->getCallDescValue());
       trfflush(pOutFile);
       }
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1026,7 +998,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390ImmInstruction * instr)
    printPrefix(pOutFile, instr);
    trfprintf(pOutFile, "%-*s0x%08x", OPCODE_SPACING, getOpCodeName(&instr->getOpCode()), instr->getSourceImmediate());
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1040,7 +1012,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390Imm2Instruction * instr)
    printPrefix(pOutFile, instr);
    // DC looks better in the tracefile than DC2 does....
    trfprintf(pOutFile, "%-*s0x%04x", OPCODE_SPACING, "DC", instr->getSourceImmediate());
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1091,7 +1063,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390RegInstruction * instr)
          print(pOutFile, targetRegister);
          }
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
 
    trfflush(pOutFile);
    }
@@ -1149,7 +1121,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390RRInstruction * instr)
       trfprintf(pOutFile, " \t\t# Call \"%s\"", getName(instr->getNode()->getSymbolReference()));
       }
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1183,7 +1155,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390TranslateInstruction * instr)
       {
       trfprintf(pOutFile, " \t\t# Call \"%s\"", getName(instr->getNode()->getSymbolReference()));
       }
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1218,7 +1190,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390RRFInstruction * instr)
       {
       trfprintf(pOutFile, " \t\t# Call \"%s\"", getName(instr->getNode()->getSymbolReference()));
       }
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1234,7 +1206,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390RRRInstruction * instr)
    print(pOutFile, instr->getRegisterOperand(2));
    trfprintf(pOutFile, ",");
    print(pOutFile, instr->getRegisterOperand(3));
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1252,7 +1224,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390RIInstruction * instr)
    if (instr->isImm())
       trfprintf(pOutFile, ",0x%x", maskHalf(imm));
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1317,7 +1289,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::S390RILInstruction * instr)
          }
       }
 
-   printInstructionComment(pOutFile, 1, instr, PRINT_START_COMMENT);
+   printInstructionComment(pOutFile, 1, instr, true);
    trfflush(pOutFile);
    }
 
@@ -1905,7 +1877,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::MemoryReference * mr, TR::Instruction * 
    bool fullyMapped = true;
    bool sawWcodeName = false;
    char comments[1024] ;
-   bool firstPrint = PRINT_START_COMMENT;
+   bool firstPrint = true;
    bool useTobeyFormat = true;
 
    // For some indirect loads and stores the _originalSymbolReference
@@ -2084,7 +2056,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::MemoryReference * mr, TR::Instruction * 
      if (regex && TR::SimpleRegex::match(regex, comments))
         {
         trfprintf(pOutFile, "\t ; %s", comments);
-        firstPrint = DO_NOT_PRINT_START_COMMENT;
+        firstPrint = false;
         }
      }
 
@@ -2389,38 +2361,6 @@ getRegisterName(TR::RealRegister::RegNum num, bool isVRF = false)
          return "VRF30";
       case TR::RealRegister::VRF31:
          return "VRF31";
-      case TR::RealRegister::AR0:
-         return "AR0";
-      case TR::RealRegister::AR1:
-         return "AR1";
-      case TR::RealRegister::AR2:
-         return "AR2";
-      case TR::RealRegister::AR3:
-         return "AR3";
-      case TR::RealRegister::AR4:
-         return "AR4";
-      case TR::RealRegister::AR5:
-         return "AR5";
-      case TR::RealRegister::AR6:
-         return "AR6";
-      case TR::RealRegister::AR7:
-         return "AR7";
-      case TR::RealRegister::AR8:
-         return "AR8";
-      case TR::RealRegister::AR9:
-         return "AR9";
-      case TR::RealRegister::AR10:
-         return "AR10";
-      case TR::RealRegister::AR11:
-         return "AR11";
-      case TR::RealRegister::AR12:
-         return "AR12";
-      case TR::RealRegister::AR13:
-         return "AR13";
-      case TR::RealRegister::AR14:
-         return "AR14";
-      case TR::RealRegister::AR15:
-         return "AR15";
       case TR::RealRegister::HPR0:
          return "HPR0";
       case TR::RealRegister::HPR1:
@@ -2461,273 +2401,8 @@ getRegisterName(TR::RealRegister::RegNum num, bool isVRF = false)
          return "LegalSecondOfFPPair";
       case TR::RealRegister::SpilledReg:
          return "Spilled";
-      case TR::RealRegister::KillVolAccessRegs:
-         return "KillVolAccessRegs";
       case TR::RealRegister::KillVolHighRegs:
          return "KillVolHighRegs";
-      default:
-         return "???";
-      }
-   }
-
-const char *
-getPlxRegisterName(TR::RealRegister::RegNum num)
-   {
-   switch (num)
-      {
-      case TR::RealRegister::NoReg:
-         return "NoReg";
-      case TR::RealRegister::EvenOddPair:
-         return "EvenOddPair";
-      case TR::RealRegister::LegalEvenOfPair:
-         return "LegalEvenOfPair";
-      case TR::RealRegister::LegalOddOfPair:
-         return "LegalOddOfPair";
-      case TR::RealRegister::AssignAny:
-         return "AssignAny";
-      case TR::RealRegister::GPR0:
-         return "@00";
-      case TR::RealRegister::GPR1:
-         return "@01";
-      case TR::RealRegister::GPR2:
-         return "@02";
-      case TR::RealRegister::GPR3:
-         return "@03";
-      case TR::RealRegister::GPR4:
-         return "@04";
-      case TR::RealRegister::GPR5:
-         return "@05";
-      case TR::RealRegister::GPR6:
-         return "@06";
-      case TR::RealRegister::GPR7:
-         return "@07";
-      case TR::RealRegister::GPR8:
-         return "@08";
-      case TR::RealRegister::GPR9:
-         return "@09";
-      case TR::RealRegister::GPR10:
-         return "@10";
-      case TR::RealRegister::GPR11:
-         return "@11";
-      case TR::RealRegister::GPR12:
-         return "@12";
-      case TR::RealRegister::GPR13:
-         return "@13";
-      case TR::RealRegister::GPR14:
-         return "@14";
-      case TR::RealRegister::GPR15:
-         return "@15";
-      case TR::RealRegister::AR0:
-         return "@AR00";
-      case TR::RealRegister::AR1:
-         return "@AR01";
-      case TR::RealRegister::AR2:
-         return "@AR02";
-      case TR::RealRegister::AR3:
-         return "@AR03";
-      case TR::RealRegister::AR4:
-         return "@AR04";
-      case TR::RealRegister::AR5:
-         return "@AR05";
-      case TR::RealRegister::AR6:
-         return "@AR06";
-      case TR::RealRegister::AR7:
-         return "@AR07";
-      case TR::RealRegister::AR8:
-         return "@AR08";
-      case TR::RealRegister::AR9:
-         return "@AR09";
-      case TR::RealRegister::AR10:
-         return "@AR10";
-      case TR::RealRegister::AR11:
-         return "@AR11";
-      case TR::RealRegister::AR12:
-         return "@AR12";
-      case TR::RealRegister::AR13:
-         return "@AR13";
-      case TR::RealRegister::AR14:
-         return "@AR14";
-      case TR::RealRegister::AR15:
-         return "@AR15";
-      default:
-         return "???";
-      }
-   }
-const char *
-getRegisterNameListing(TR::RealRegister::RegNum num, bool isVRF = false)
-   {
-   switch (num)
-      {
-      case TR::RealRegister::NoReg:
-         return "NoReg";
-      case TR::RealRegister::EvenOddPair:
-         return "EvenOddPair";
-      case TR::RealRegister::LegalEvenOfPair:
-         return "LegalEvenOfPair";
-      case TR::RealRegister::LegalOddOfPair:
-         return "LegalOddOfPair";
-      case TR::RealRegister::AssignAny:
-         return "AssignAny";
-      case TR::RealRegister::GPR0:
-         return "r0";
-      case TR::RealRegister::GPR1:
-         return "r1";
-      case TR::RealRegister::GPR2:
-         return "r2";
-      case TR::RealRegister::GPR3:
-         return "r3";
-      case TR::RealRegister::GPR4:
-         return "r4";
-      case TR::RealRegister::GPR5:
-         return "r5";
-      case TR::RealRegister::GPR6:
-         return "r6";
-      case TR::RealRegister::GPR7:
-         return "r7";
-      case TR::RealRegister::GPR8:
-         return "r8";
-      case TR::RealRegister::GPR9:
-         return "r9";
-      case TR::RealRegister::GPR10:
-         return "r10";
-      case TR::RealRegister::GPR11:
-         return "r11";
-      case TR::RealRegister::GPR12:
-         return "r12";
-      case TR::RealRegister::GPR13:
-         return "r13";
-      case TR::RealRegister::GPR14:
-         return "r14";
-      case TR::RealRegister::GPR15:
-         return "r15";
-      case TR::RealRegister::FPR0:
-         return (isVRF)?"vrf0":"fp0";
-      case TR::RealRegister::FPR1:
-         return (isVRF)?"vrf1":"fp1";
-      case TR::RealRegister::FPR2:
-         return (isVRF)?"vrf2":"fp2";
-      case TR::RealRegister::FPR3:
-         return (isVRF)?"vrf3":"fp3";
-      case TR::RealRegister::FPR4:
-         return (isVRF)?"vrf4":"fp4";
-      case TR::RealRegister::FPR5:
-         return (isVRF)?"vrf5":"fp5";
-      case TR::RealRegister::FPR6:
-         return (isVRF)?"vrf6":"fp6";
-      case TR::RealRegister::FPR7:
-         return (isVRF)?"vrf7":"fp7";
-      case TR::RealRegister::FPR8:
-         return (isVRF)?"vrf8":"fp8";
-      case TR::RealRegister::FPR9:
-         return (isVRF)?"vrf9":"fp9";
-      case TR::RealRegister::FPR10:
-         return (isVRF)?"vrf10":"fp10";
-      case TR::RealRegister::FPR11:
-         return (isVRF)?"vrf11":"fp11";
-      case TR::RealRegister::FPR12:
-         return (isVRF)?"vrf12":"fp12";
-      case TR::RealRegister::FPR13:
-         return (isVRF)?"vrf13":"fp13";
-      case TR::RealRegister::FPR14:
-         return (isVRF)?"vrf14":"fp14";
-      case TR::RealRegister::FPR15:
-         return (isVRF)?"vrf15":"fp15";
-      case TR::RealRegister::VRF16:
-         return "vrf16";
-      case TR::RealRegister::VRF17:
-         return "vrf17";
-      case TR::RealRegister::VRF18:
-         return "vrf18";
-      case TR::RealRegister::VRF19:
-         return "vrf19";
-      case TR::RealRegister::VRF20:
-         return "vrf20";
-      case TR::RealRegister::VRF21:
-         return "vrf21";
-      case TR::RealRegister::VRF22:
-         return "vrf22";
-      case TR::RealRegister::VRF23:
-         return "vrf23";
-      case TR::RealRegister::VRF24:
-         return "vrf24";
-      case TR::RealRegister::VRF25:
-         return "vrf25";
-      case TR::RealRegister::VRF26:
-         return "vrf26";
-      case TR::RealRegister::VRF27:
-         return "vrf27";
-      case TR::RealRegister::VRF28:
-         return "vrf28";
-      case TR::RealRegister::VRF29:
-         return "vrf29";
-      case TR::RealRegister::VRF30:
-         return "vrf30";
-      case TR::RealRegister::VRF31:
-         return "vrf31";
-      case TR::RealRegister::AR0:
-         return "ar0";
-      case TR::RealRegister::AR1:
-         return "ar1";
-      case TR::RealRegister::AR2:
-         return "ar2";
-      case TR::RealRegister::AR3:
-         return "ar3";
-      case TR::RealRegister::AR4:
-         return "ar4";
-      case TR::RealRegister::AR5:
-         return "ar5";
-      case TR::RealRegister::AR6:
-         return "ar6";
-      case TR::RealRegister::AR7:
-         return "ar7";
-      case TR::RealRegister::AR8:
-         return "ar8";
-      case TR::RealRegister::AR9:
-         return "ar9";
-      case TR::RealRegister::AR10:
-         return "ar10";
-      case TR::RealRegister::AR11:
-         return "ar11";
-      case TR::RealRegister::AR12:
-         return "ar12";
-      case TR::RealRegister::AR13:
-         return "ar13";
-      case TR::RealRegister::AR14:
-         return "ar14";
-      case TR::RealRegister::AR15:
-         return "ar15";
-      case TR::RealRegister::HPR0:
-         return "hpr0";
-      case TR::RealRegister::HPR1:
-         return "hpr1";
-      case TR::RealRegister::HPR2:
-         return "hpr2";
-      case TR::RealRegister::HPR3:
-         return "hpr3";
-      case TR::RealRegister::HPR4:
-         return "hpr4";
-      case TR::RealRegister::HPR5:
-         return "hpr5";
-      case TR::RealRegister::HPR6:
-         return "hpr6";
-      case TR::RealRegister::HPR7:
-         return "hpr7";
-      case TR::RealRegister::HPR8:
-         return "hpr8";
-      case TR::RealRegister::HPR9:
-         return "hpr9";
-      case TR::RealRegister::HPR10:
-         return "hpr10";
-      case TR::RealRegister::HPR11:
-         return "hpr11";
-      case TR::RealRegister::HPR12:
-         return "hpr12";
-      case TR::RealRegister::HPR13:
-         return "hpr13";
-      case TR::RealRegister::HPR14:
-         return "hpr14";
-      case TR::RealRegister::HPR15:
-         return "hpr15";
       default:
          return "???";
       }
@@ -2953,7 +2628,7 @@ TR_Debug::printFullRegInfo(TR::FILE *pOutFile, TR::RealRegister * reg)
 const char *
 TR_Debug::getOpCodeName(TR::InstOpCode * opCode)
    {
-   return TR::InstOpCode::opCodeToNameMap[opCode->getOpCodeValue()];
+   return TR::InstOpCode::metadata[opCode->getOpCodeValue()].name;
    }
 
 void
@@ -2966,17 +2641,11 @@ TR_Debug::printGPRegisterStatus(TR::FILE *pOutFile, TR::Machine *machine)
    trfprintf(pOutFile, "\n                         GP Reg Status:          Register         State        Assigned\n");
    for (int i = TR::RealRegister::FirstGPR; i <= TR::RealRegister::LastAssignableGPR; i++)
       {
-      trfprintf(pOutFile, "%p                      ", machine->getRegisterFile(i));
-      printFullRegInfo(pOutFile, machine->getRegisterFile(i));
+      TR::RealRegister *realReg = machine->realRegister(static_cast<TR::RealRegister::RegNum>(i));
+      trfprintf(pOutFile, "%p                      ", realReg);
+      printFullRegInfo(pOutFile, realReg);
       }
-   if ( _comp->getOption(TR_Enable390AccessRegs) )
-      {
-      for (int i = TR::RealRegister::FirstAR; i <= TR::RealRegister::LastAR; i++)
-         {
-         trfprintf(pOutFile, "%p                      ", machine->getRegisterFile(i));
-         printFullRegInfo(pOutFile, machine->getRegisterFile(i));
-         }
-      }
+
    trfflush(pOutFile);
    }
 void
@@ -2989,8 +2658,9 @@ TR_Debug::printFPRegisterStatus(TR::FILE *pOutFile, TR::Machine *machine)
    trfprintf(pOutFile, "\n                         FP Reg Status:          Register         State        Assigned\n");
    for (int i = TR::RealRegister::FirstFPR; i <= TR::RealRegister::LastFPR; i++)
       {
-      trfprintf(pOutFile, "%p                      ", machine->getRegisterFile(i));
-      printFullRegInfo(pOutFile, machine->getRegisterFile(i));
+      TR::RealRegister *realReg = machine->realRegister(static_cast<TR::RealRegister::RegNum>(i));
+      trfprintf(pOutFile, "%p                      ", realReg);
+      printFullRegInfo(pOutFile, realReg);
       }
    trfflush(pOutFile);
    }
@@ -3015,7 +2685,7 @@ TR_Debug::printRegisterDependencies(TR::FILE *pOutFile, TR_S390RegisterDependenc
       }
    for (int i = 0; i < numberOfRegisters; i++)
       {
-      TR::Register * virtReg = rgd->getRegisterDependency(i)->getRegister(_comp->cg());
+      TR::Register * virtReg = rgd->getRegisterDependency(i)->getRegister();
       TR::RealRegister::RegNum realReg = rgd->getRegisterDependency(i)->getRealRegister();
 
       if (virtReg != NULL)
@@ -3090,22 +2760,6 @@ TR_Debug::getBitRegNum(TR::RealRegister * reg)
 uint8_t *
 TR_Debug::printLoadVMThreadInstruction(TR::FILE *pOutFile, uint8_t* cursor)
    {
-   if (_comp->getOption(TR_Enable390FreeVMThreadReg) && _comp->cg()->getVMThreadRegister()->getBackingStorage())
-      {
-      uint32_t offset = ( *(uint32_t *)cursor & 0xFFF);
-      if (TR::Compiler->target.is64Bit())
-         {
-         printPrefix(pOutFile, NULL, cursor, 6);
-         trfprintf(pOutFile, "LG \tGPR13, %d(,GPR5)\t#Load VM Thread value", offset);
-         cursor += 6;
-         }
-      else
-         {
-         printPrefix(pOutFile, NULL, cursor, 4);
-         trfprintf(pOutFile, "L \tGPR13, %d(,GPR5)\t#Load VM Thread value", offset);
-         cursor += 4;
-         }
-      }
    return cursor;
    }
 

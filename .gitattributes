@@ -1,0 +1,11 @@
+# This .gitattributes file will cause all text files EXCEPT for
+# git's .gitattributes and .gitignore files to be encoded as EBCDIC
+# when cloned using git (from Rocket Software) on z/OS platform.
+#
+# Selected binary files will not be translated at all.
+
+# Binary files
+*.jpg git-encoding=BINARY working-tree-encoding=BINARY
+*.png git-encoding=BINARY working-tree-encoding=BINARY
+*.gif git-encoding=BINARY working-tree-encoding=BINARY
+*.zip git-encoding=BINARY working-tree-encoding=BINARY

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -607,7 +607,7 @@ MM_MemorySubSpaceSemiSpace::poisonEvacuateSpace()
 		current += 1;
 	}
 
-#if defined(OMR_VALGRIND_MEMCHECK)			
+#if defined(OMR_VALGRIND_MEMCHECK)
 	valgrindMakeMemNoaccess((uintptr_t) _allocateSpaceBase, (uintptr_t) _allocateSpaceTop - (uintptr_t) _allocateSpaceBase);	
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */	
 }
@@ -977,7 +977,7 @@ MM_MemorySubSpaceSemiSpace::checkSubSpaceMemoryPostCollectResize(MM_EnvironmentB
 void
 MM_MemorySubSpaceSemiSpace::checkResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC)
 {
-	uintptr_t oldVMState = env->pushVMstate(J9VMSTATE_GC_CHECK_RESIZE);
+	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_CHECK_RESIZE);
 	/* this we are called at the end of precolate global GC, due to aborted Concurrent Scavenge,
 	 * we have to restore tilt (that has been set to 100% to do unified sliding compact of Nursery */
 	if (_extensions->isConcurrentScavengerEnabled() && _extensions->isScavengerBackOutFlagRaised()) {
@@ -992,7 +992,7 @@ MM_MemorySubSpaceSemiSpace::checkResize(MM_EnvironmentBase *env, MM_AllocateDesc
 intptr_t
 MM_MemorySubSpaceSemiSpace::performResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription)
 {
-	uintptr_t oldVMState = env->pushVMstate(J9VMSTATE_GC_PERFORM_RESIZE);
+	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_PERFORM_RESIZE);
 	uintptr_t regionSize = env->getExtensions()->getHeap()->getHeapRegionManager()->getRegionSize();
 	
 	if (_desiredSurvivorSpaceRatio > 0.0) {

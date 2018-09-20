@@ -77,7 +77,6 @@ OMR::ARM::CodeGenerator::CodeGenerator()
    : OMR::CodeGenerator(),
      _frameRegister(NULL),
      _constantData(NULL),
-     _assignmentDirection(Backward),
      _outOfLineCodeSectionList(self()->trMemory()),
      _internalControlFlowNestingDepth(0),
      _internalControlFlowSafeNestingDepth(0)
@@ -164,7 +163,7 @@ OMR::ARM::CodeGenerator::CodeGenerator()
       // wrapping-around.
       _maxObjectSizeGuaranteedNotToOverflow = 0x10000000;
       self()->setSupportsDivCheck();
-      if (!self()->comp()->getOptions()->getOption(TR_DisableTraps))
+      if (!self()->comp()->getOption(TR_DisableTraps))
          self()->setHasResumableTrapHandler();
       }
    else
@@ -229,6 +228,9 @@ OMR::ARM::CodeGenerator::CodeGenerator()
       {
       self()->setSupportsProfiledInlining();
       }
+
+   // Disable optimizations for max min by default on arm
+   self()->comp()->setOption(TR_DisableMaxMinOptimization);
    }
 
 
@@ -385,9 +387,6 @@ void OMR::ARM::CodeGenerator::doRegisterAssignment(TR_RegisterKinds kindsToAssig
 
    if (comp->getOption(TR_TraceCG))
       diagnostic("\nPerforming Register Assignment:\n");
-
-   // gprs, fprs, and ccrs are all assigned in backward direction
-   self()->setAssignmentDirection(Backward);
 
    TR::Instruction *instructionCursor = self()->getAppendInstruction();
    if (!comp->getOption(TR_DisableOOL))
@@ -695,7 +694,7 @@ TR_GlobalRegisterNumber OMR::ARM::CodeGenerator::pickRegister(TR_RegisterCandida
    {
    // Tactical GRA
    // We delegate the decision to use register pressure simulation to common code.
-   // if (!comp()->getOptions()->getOption(TR_DisableRegisterPressureSimulation))
+   // if (!comp()->getOption(TR_DisableRegisterPressureSimulation))
    return OMR::CodeGenerator::pickRegister(regCan, barr, availRegs, highRegisterNumber, candidates);
    // }
    }

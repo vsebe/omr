@@ -66,6 +66,7 @@
 #include "il/NodePool.hpp"                     // for TR::NodePool
 #include "il/Node_inlines.hpp"                 // for Node::getType, etc
 #include "il/Symbol.hpp"                       // for Symbol
+#include "il/symbol/StaticSymbol.hpp"          // for StaticSymbol
 #include "il/SymbolReference.hpp"              // for SymbolReference
 #include "il/TreeTop.hpp"                      // for TreeTop
 #include "il/TreeTop_inlines.hpp"              // for TreeTop::getNode, etc
@@ -259,7 +260,6 @@ OMR::Compilation::Compilation(
    _loopVersionedWrtAsyncChecks(false),
    _codeCacheSwitched(false),
    _commitedCallSiteInfo(false),
-   _useLongRegAllocation(false),
    _containsBigDecimalLoad(false),
    _osrStateIsReliable(true),
    _canAffordOSRControlFlow(true),
@@ -274,9 +274,10 @@ OMR::Compilation::Compilation(
    _checkcastNullChkInfo(getTypedAllocator<TR_Pair<TR_ByteCodeInfo, TR::Node> *>(self()->allocator())),
    _nodesThatShouldPrefetchOffset(getTypedAllocator<TR_Pair<TR::Node,uint32_t> *>(self()->allocator())),
    _extraPrefetchInfo(getTypedAllocator<TR_PrefetchInfo*>(self()->allocator())),
+   _debugCounterMap(std::less<const void *>(), getTypedAllocator<DebugCounterEntry>(self()->allocator())),
    _currentBlock(NULL),
    _verboseOptTransformationCount(0),
-   _aotMethodCodeStart(NULL),
+   _relocatableMethodCodeStart(NULL),
    _compThreadID(id),
    _failCHtableCommitFlag(false),
    _numReservedIPICTrampolines(0),
@@ -324,14 +325,14 @@ OMR::Compilation::Compilation(
    // while the PersistentMethodInfo is allocated during codegen creation
    // Access to this list must be performed with assumptionTableMutex in hand
    //
-   if (!TR::Options::getCmdLineOptions()->getOption(TR_DisableFastAssumptionReclamation))
+   if (!options.getOption(TR_DisableFastAssumptionReclamation))
       _metadataAssumptionList = new (m->trPersistentMemory()) TR::SentinelRuntimeAssumption();
 #endif
 
    //Random fields must be set before allocating codegen
    _primaryRandom = new (m->trHeapMemory()) TR_RandomGenerator(options.getRandomSeed());
    _adhocRandom = new (m->trHeapMemory()) TR_RandomGenerator(options.getRandomSeed());
-   if (_options->getOption(TR_RandomSeedSignatureHash))
+   if (options.getOption(TR_RandomSeedSignatureHash))
       {
       int32_t hash = 0;
       for (const char *c = self()->signature(); *c; c++)
@@ -345,7 +346,7 @@ OMR::Compilation::Compilation(
    if (ilGenRequest.details().isMethodInProgress())
       {
       _flags.set(IsDLTCompile);
-      _options->setAllowRecompilation(false);
+      options.setAllowRecompilation(false);
       }
 
    if (optimizationPlan)
@@ -362,13 +363,13 @@ OMR::Compilation::Compilation(
       }
 
    // if we are not in the selective NoOptServer mode
-   _isOptServer = (!_options->getOption(TR_NoOptServer)) &&
-         ( _options->getOption(TR_Server)
+   _isOptServer = (!options.getOption(TR_NoOptServer)) &&
+         ( options.getOption(TR_Server)
 #ifdef J9_PROJECT_SPECIFIC
            || (self()->getPersistentInfo()->getNumLoadedClasses() >= TR::Options::_bigAppThreshold)
 #endif
          );
-   _isServerInlining = !_options->getOption(TR_NoOptServer);
+   _isServerInlining = !options.getOption(TR_NoOptServer);
 
    //_methodSymbol must be done after symRefTab, but before codegen
    // _methodSymbol must be initialized here because creating a jitted method symbol
@@ -391,7 +392,7 @@ OMR::Compilation::Compilation(
    _globalRegisterCandidates = new (self()->trHeapMemory()) TR_RegisterCandidates(self());
 
 #ifdef J9_PROJECT_SPECIFIC
-   if (_recompilationInfo && _options->getOptLevelDowngraded())
+   if (_recompilationInfo && options.getOptLevelDowngraded())
       _recompilationInfo->getMethodInfo()->setOptLevelDowngraded(true);
 #endif
 
@@ -431,7 +432,7 @@ OMR::Compilation::Compilation(
       _options->setOption(TR_EnableOSROnGuardFailure, false);
       }
 
-   if (_options->getOption(TR_EnableOSR))
+   if (options.getOption(TR_EnableOSR))
       {
       // Current implementation of partial inlining will break OSR
       self()->setOption(TR_DisablePartialInlining);
@@ -439,7 +440,7 @@ OMR::Compilation::Compilation(
       //TODO: investigate the memory footprint of this allocation
       _osrCompilationData = new (self()->trHeapMemory()) TR_OSRCompilationData(self());
 
-      if (((self()->getMethodHotness() < warm) || self()->compileRelocatableCode() || self()->isProfilingCompilation()) && !enableOSRAtAllOptLevels && !_options->getOption(TR_FullSpeedDebug)) // Off for two reasons : 1) not sure if we can afford the increase in compile time due to the extra OSR control flow at cold and 2) not sure at this stage in 727 whether OSR can work with AOT (will try to find out soon) but disabling till I do find out
+      if (((self()->getMethodHotness() < warm) || self()->compileRelocatableCode() || self()->isProfilingCompilation()) && !enableOSRAtAllOptLevels && !options.getOption(TR_FullSpeedDebug)) // Off for two reasons : 1) not sure if we can afford the increase in compile time due to the extra OSR control flow at cold and 2) not sure at this stage in 727 whether OSR can work with AOT (will try to find out soon) but disabling till I do find out
          _canAffordOSRControlFlow = false;
       }
    else
@@ -886,7 +887,7 @@ OMR::Compilation::isJProfilingCompilation()
    return false;
    }
 
-#if defined(AIXPPC) || defined(LINUX) || defined(J9ZOS390) || defined(WINDOWS)
+#if defined(AIXPPC) || defined(LINUX) || defined(J9ZOS390) || defined(OMR_OS_WINDOWS)
 static void stopBeforeCompile()
    {
    static int first = 1;
@@ -897,7 +898,7 @@ static void stopBeforeCompile()
       first = 0;
       }
    }
-#endif
+#endif /* defined(AIXPPC) || defined(LINUX) || defined(J9ZOS390) || defined(OMR_OS_WINDOWS) */
 
 static int32_t strHash(const char *str)
    {
@@ -914,7 +915,7 @@ int32_t OMR::Compilation::compile()
    if (!self()->getOption(TR_DisableSupportForCpuSpentInCompilation))
       _cpuTimeAtStartOfCompilation = TR::Compiler->vm.cpuTimeSpentInCompilationThread(self());
 
-   bool printCodegenTime = TR::Options::getCmdLineOptions()->getOption(TR_CummTiming);
+   bool printCodegenTime = self()->getOption(TR_CummTiming);
 
    if (self()->isOptServer())
       {
@@ -961,17 +962,17 @@ int32_t OMR::Compilation::compile()
       self()->getDebug()->setupDebugger((void *) *((long*)&(stopBeforeCompile)));
       stopBeforeCompile();
       }
-#elif defined(LINUX) || defined(J9ZOS390) || defined(WINDOWS)
+#elif defined(LINUX) || defined(J9ZOS390) || defined(OMR_OS_WINDOWS)
    if (self()->getOption(TR_DebugBeforeCompile))
       {
 #if defined(LINUXPPC64)
       self()->getDebug()->setupDebugger((void *) *((long*)&(stopBeforeCompile)),(void *) *((long*)&(stopBeforeCompile)), true);
 #else
       self()->getDebug()->setupDebugger((void *) &stopBeforeCompile,(void *) &stopBeforeCompile,true);
-#endif
+#endif /* defined(LINUXPPC64) */
       stopBeforeCompile();
       }
-#endif
+#endif /* defined(AIXPPC) */
 
    if (self()->getOutFile() != NULL && (self()->getOption(TR_TraceAll) || debug("traceStartCompile") || self()->getOptions()->getAnyTraceCGOption() || self()->getOption(TR_Timing)))
       {
@@ -1209,7 +1210,7 @@ int32_t OMR::Compilation::compile()
       if (chTable)
          self()->getDebug()->dump(self()->getOutFile(), chTable);
       }
-#endif
+#endif /* ifdef(J9_PROJECT_SPECIFIC) */
 
 #if defined(AIXPPC) || defined(LINUXPPC)
    if (self()->getOption(TR_DebugOnEntry))
@@ -1220,14 +1221,14 @@ int32_t OMR::Compilation::compile()
       self()->getDebug()->setupDebugger((void *)jitTojitStart);
 #else
       self()->getDebug()->setupDebugger((void *)jitTojitStart, self()->cg()->getCodeEnd(), false);
-#endif
+#endif /* defined(AIXPPC) */
       }
-#elif defined(LINUX) || defined(J9ZOS390) || defined(WINDOWS)
+#elif defined(LINUX) || defined(J9ZOS390) || defined(OMR_OS_WINDOWS)
    if (self()->getOption(TR_DebugOnEntry))
       {
       self()->getDebug()->setupDebugger(self()->cg()->getCodeStart(),self()->cg()->getCodeEnd(),false);
       }
-#endif
+#endif /* defined(LINUX) || defined(J9ZOS390) || defined(OMR_OS_WINDOWS) */
 
    return COMPILATION_SUCCEEDED;
    }
@@ -1839,7 +1840,7 @@ void OMR::Compilation::resetVisitCounts(vcount_t count, TR::TreeTop *start)
 void OMR::Compilation::reportFailure(const char *reason)
    {
    traceMsg(self(), "Compilation Failed Because: %s\n", reason);
-   if (TR::Options::getCmdLineOptions()->getOption(TR_PrintErrorInfoOnCompFailure))
+   if (self()->getOption(TR_PrintErrorInfoOnCompFailure))
       fprintf(stderr, "Compilation Failed Because: %s\n", reason);
    }
 
@@ -1948,7 +1949,7 @@ void OMR::Compilation::dumpMethodTrees(char *title, TR::ResolvedMethodSymbol * m
 
    self()->getDebug()->printIRTrees(self()->getOutFile(), title, methodSymbol);
 
-   if (!self()->getOptions()->getOption(TR_DisableDumpFlowGraph))
+   if (!self()->getOption(TR_DisableDumpFlowGraph))
       self()->dumpFlowGraph(methodSymbol->getFlowGraph());
 
    if (self()->isOutermostMethod() && self()->getKnownObjectTable()) // This is pretty verbose.  Let's just dump it when we're dumping the whole method.
@@ -1976,6 +1977,28 @@ void OMR::Compilation::dumpFlowGraph(TR::CFG * cfg)
          trfprintf(self()->getOutFile(),"\nControl Flow Graph is empty\n");
       }
    trfflush(self()->getOutFile());
+   }
+
+void
+OMR::Compilation::mapStaticAddressToCounter(TR::SymbolReference *symRef, TR::DebugCounterBase *counter)
+   {
+   const void *staticAddress = (const void *)symRef->getSymbol()->castToStaticSymbol()->getStaticAddress();
+   self()->getDebugCounterMap().insert(std::make_pair(staticAddress, counter));
+   }
+
+TR::DebugCounterBase *
+OMR::Compilation::getCounterFromStaticAddress(TR::SymbolReference *symRef)
+   {
+   const void *staticAddress = (const void *)symRef->getSymbol()->castToStaticSymbol()->getStaticAddress();
+   TR::Compilation::DebugCounterMap::iterator entry = self()->getDebugCounterMap().find(staticAddress);
+   if (entry != self()->getDebugCounterMap().end())
+      {
+      return entry->second;
+      }
+   else
+      {
+      return NULL;
+      }
    }
 
 TR::CodeCache *
@@ -2015,7 +2038,7 @@ void OMR::Compilation::validateIL(TR::ILValidationContext ilValidationContext)
 
 void OMR::Compilation::verifyTrees(TR::ResolvedMethodSymbol *methodSymbol)
    {
-   if (self()->getDebug() && !self()->getOptions()->getOption(TR_DisableVerification) && !self()->isPeekingMethod())
+   if (self()->getDebug() && !self()->getOption(TR_DisableVerification) && !self()->isPeekingMethod())
       {
       if (!methodSymbol)
          methodSymbol = _methodSymbol;
@@ -2025,7 +2048,7 @@ void OMR::Compilation::verifyTrees(TR::ResolvedMethodSymbol *methodSymbol)
 
 void OMR::Compilation::verifyBlocks(TR::ResolvedMethodSymbol *methodSymbol)
    {
-   if (self()->getDebug() && !self()->getOptions()->getOption(TR_DisableVerification) && !self()->isPeekingMethod())
+   if (self()->getDebug() && !self()->getOption(TR_DisableVerification) && !self()->isPeekingMethod())
       {
       if (!methodSymbol)
          methodSymbol = _methodSymbol;
@@ -2035,7 +2058,7 @@ void OMR::Compilation::verifyBlocks(TR::ResolvedMethodSymbol *methodSymbol)
 
 void OMR::Compilation::verifyCFG(TR::ResolvedMethodSymbol *methodSymbol)
    {
-   if (self()->getDebug() && !self()->getOptions()->getOption(TR_DisableVerification) && !self()->isPeekingMethod())
+   if (self()->getDebug() && !self()->getOption(TR_DisableVerification) && !self()->isPeekingMethod())
       {
       if (!methodSymbol)
     methodSymbol = _methodSymbol;

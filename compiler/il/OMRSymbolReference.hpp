@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -119,7 +119,8 @@ public:
                    TR::Symbol *sym,
                    mcount_t owningMethodIndex,
                    int32_t cpIndex,
-                   int32_t unresolvedIndex = 0);
+                   int32_t unresolvedIndex = 0,
+                   TR::KnownObjectTable::Index knownObjectIndex = TR::KnownObjectTable::UNKNOWN);
 
    SymbolReference(TR::SymbolReferenceTable *symRefTab,
                    TR::SymbolReference& sr,

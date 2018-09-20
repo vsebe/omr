@@ -382,13 +382,13 @@ TR::PPCImmInstruction::addMetaDataForCodeAddress(uint8_t *cursor)
          switch(getReloKind())
             {
             case TR_AbsoluteHelperAddress:
-               cg()->addAOTRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation(cursor, (uint8_t *)getSymbolReference(), TR_AbsoluteHelperAddress, cg()), __FILE__, __LINE__, getNode());
+               cg()->addExternalRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation(cursor, (uint8_t *)getSymbolReference(), TR_AbsoluteHelperAddress, cg()), __FILE__, __LINE__, getNode());
                break;
             case TR_RamMethod:
-               cg()->addAOTRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation(cursor, NULL, TR_RamMethod, cg()), __FILE__, __LINE__, getNode());
+               cg()->addExternalRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation(cursor, NULL, TR_RamMethod, cg()), __FILE__, __LINE__, getNode());
                break;
             case TR_BodyInfoAddress:
-               cg()->addAOTRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation(cursor, 0, TR_BodyInfoAddress, cg()), __FILE__, __LINE__, getNode());
+               cg()->addExternalRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation(cursor, 0, TR_BodyInfoAddress, cg()), __FILE__, __LINE__, getNode());
                break;
             default:
                TR_ASSERT(false, "Unsupported AOT relocation type specified.");
@@ -412,7 +412,7 @@ TR::PPCImmInstruction::addMetaDataForCodeAddress(uint8_t *cursor)
       //
       void **locationToPatch = (void**)(cursor - (TR::Compiler->target.is64Bit()?4:0));
       cg()->jitAddPicToPatchOnClassRedefinition(*locationToPatch, locationToPatch);
-      cg()->addAOTRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation((uint8_t *)locationToPatch, (uint8_t *)*locationToPatch, TR_HCR, cg()), __FILE__,__LINE__, getNode());
+      cg()->addExternalRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation((uint8_t *)locationToPatch, (uint8_t *)*locationToPatch, TR_HCR, cg()), __FILE__,__LINE__, getNode());
       }
 
    }
@@ -656,12 +656,6 @@ static void insertMaskField(uint32_t *instruction, TR::InstOpCode::Mnemonic op, 
    // number is strangely encoded in that the low order bit 5 comes first
    // and the high order bits after.  The field is in bit positions 21-26.
 
-   if (op == TR::InstOpCode::cror)
-      {
-      encoding = (((uint32_t) lmask) & 0xffffffff);
-      *instruction |= encoding;
-      return;
-      }
    // For these instructions the immediate is not a mask but a 1-bit immediate operand
    if (op == TR::InstOpCode::cmprb)
       {
@@ -696,9 +690,17 @@ static void insertMaskField(uint32_t *instruction, TR::InstOpCode::Mnemonic op, 
       return;
       }
 
-   TR_ASSERT(lmask, "A mask of 0 cannot be encoded");
-
    TR::InstOpCode       opCode(op);
+
+   if (opCode.isCRLogical())
+      {
+      encoding = (((uint32_t) lmask) & 0xffffffff);
+      *instruction |= encoding;
+      return;
+      }
+
+   TR_ASSERT(lmask, "A mask of 0 cannot be encoded");   
+
    if (opCode.isDoubleWord())
       {
       int bitnum;
@@ -790,6 +792,7 @@ uint8_t *TR::PPCTrg1Src2ImmInstruction::generateBinaryEncoding()
    cursor += PPC_INSTRUCTION_LENGTH;
    setBinaryLength(PPC_INSTRUCTION_LENGTH);
    setBinaryEncoding(instructionStart);
+
    return cursor;
    }
 

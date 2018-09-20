@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,17 +19,17 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#ifndef OMR_Z_MACHINEBASE_INCL
-#define OMR_Z_MACHINEBASE_INCL
+#ifndef OMR_Z_MACHINE_INCL
+#define OMR_Z_MACHINE_INCL
 /*
  * The following #define and typedef must appear before any #includes in this file
  */
-#ifndef OMR_MACHINEBASE_CONNECTOR
-#define OMR_MACHINEBASE_CONNECTOR
+#ifndef OMR_MACHINE_CONNECTOR
+#define OMR_MACHINE_CONNECTOR
 namespace OMR {namespace Z { class Machine; } }
 namespace OMR { typedef OMR::Z::Machine MachineConnector; }
 #else
-#error OMR::Z::Machine expected to be a primary connector, but a OMR connector is already defined
+#error OMR::Z::Machine expected to be a primary connector, but an OMR connector is already defined
 #endif
 
 #include "compiler/codegen/OMRMachine.hpp"
@@ -45,7 +45,6 @@ namespace TR { class CodeGenerator; }
 namespace TR { class Instruction; }
 namespace TR { class Register; }
 namespace TR { class RegisterDependencyConditions; }
-namespace TR { namespace Z { class MachineBase; } }
 template <class T> class TR_Stack;
 template <typename ListKind> class List;
 
@@ -58,7 +57,6 @@ template <typename ListKind> class List;
 #define NUM_S390_HPR 16
 #define NUM_S390_FPR 16
 #define NUM_S390_VRF 16 ///< 32 after full RA complete
-#define NUM_S390_AR  16
 #define NUM_S390_FPR_PAIRS 8
 
 /** Max. displacement */
@@ -70,8 +68,8 @@ template <typename ListKind> class List;
 
 // single byte Immediate field limit
 #define MAX_UNSIGNED_IMMEDIATE_BYTE_VAL    0xFF
-#define MAX_IMMEDIATE_BYTE_VAL   	       127           // 0x7f
-#define MIN_IMMEDIATE_BYTE_VAL  	         -128           // 0x80
+#define MAX_IMMEDIATE_BYTE_VAL             127           // 0x7f
+#define MIN_IMMEDIATE_BYTE_VAL            -128           // 0x80
 
 #define MAX_RELOCATION_VAL              65535
 #define MIN_RELOCATION_VAL             -65536
@@ -82,8 +80,8 @@ template <typename ListKind> class List;
 
 // Immediate field limit
 #define MAX_UNSIGNED_IMMEDIATE_VAL    0xFFFF
-#define MAX_IMMEDIATE_VAL   	       32767         // 0x7fff
-#define MIN_IMMEDIATE_VAL  	      -32768         // 0x8000
+#define MAX_IMMEDIATE_VAL             32767         // 0x7fff
+#define MIN_IMMEDIATE_VAL            -32768         // 0x8000
 
 // LL: Maximum Immediate field limit for Golden Eagle
 #define GE_MAX_IMMEDIATE_VAL          (int64_t)CONSTANT64(0x000000007FFFFFFF)
@@ -183,7 +181,6 @@ namespace Z
 
 class OMR_EXTENSIBLE Machine : public OMR::Machine
    {
-   TR::RealRegister            *_registerFile[TR::RealRegister::NumRegisters];
    TR::Register                *_registerAssociations[TR::RealRegister::NumRegisters];
    uint32_t                     _globalRegisterNumberToRealRegisterMap[NUM_S390_GPR+NUM_S390_FPR+NUM_S390_VRF+NUM_S390_HPR];
    TR::RealRegister::RegNum     _S390FirstOfFPRegisterPairs[NUM_S390_FPR_PAIRS];
@@ -202,10 +199,6 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
    /** Used to keep track of blocked registers (HPR/GPR) that upgrades/spill's etc should not use. Typical stores ~0-3 registers. */
    TR_Stack<TR::RealRegister *>               *_blockedUpgradedRegList;
 
-   TR::CodeGenerator *_cg;
-
-   TR_GlobalRegisterNumber  _firstGlobalAccessRegisterNumber;
-   TR_GlobalRegisterNumber  _lastGlobalAccessRegisterNumber;
    TR_GlobalRegisterNumber  _firstGlobalGPRRegisterNumber;
    TR_GlobalRegisterNumber  _lastGlobalGPRRegisterNumber;
    TR_GlobalRegisterNumber  _firstGlobalHPRRegisterNumber;
@@ -230,7 +223,7 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
    TR_GlobalRegisterNumber  _globalEntryPointRegisterNumber;
    TR_GlobalRegisterNumber  _globalReturnAddressRegisterNumber;
 
-   void initialiseRegisterFile();
+   void initializeRegisterFile();
    void initializeFPRegPairTable();
 
    public:
@@ -246,11 +239,6 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
       {
       return _registerFile[regNum];
       }
-
-   TR::RealRegister *getRealRegister(TR_GlobalRegisterNumber grn)
-       {
-       return _registerFile[_globalRegisterNumberToRealRegisterMap[grn]];
-       }
 
    uint8_t getGPRSize();
    uint8_t getFPRSize() const { return 8;}
@@ -269,9 +257,9 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
 
    /** GENERAL INTERFACE for OBTAINING ANY TYPE of REG */
    TR::Register *assignBestRegister(TR::Register    *targetRegister,
-				   TR::Instruction *currInst,
-                                   bool            doBookKeeping,
-                                   uint64_t        availRegMask = 0xffffffff);
+                                    TR::Instruction *currInst,
+                                    bool            doBookKeeping,
+                                    uint64_t        availRegMask = 0xffffffff);
 
 
    // EVENODD PAIR REGISTERS methods
@@ -297,7 +285,6 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
                                         flags32_t            instFlags);
 
    bool  isLegalEvenOddPair(TR::RealRegister* evenReg, TR::RealRegister* oddReg, uint64_t availRegMask=0x0000ffff);
-   bool  isLegalEvenOddRestrictedPair(TR::RealRegister* evenReg, TR::RealRegister* oddReg, uint64_t availRegMask=0x0000ffff);
    bool  isLegalEvenRegister(TR::RealRegister* reg, bool allowBlocked, uint64_t availRegMask=0x0000ffff, bool allowLocked=false);
    bool  isLegalOddRegister(TR::RealRegister* reg, bool allowBlocked, uint64_t availRegMask=0x0000ffff, bool allowLocked=false);
 
@@ -309,12 +296,11 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
    TR::RealRegister* findBestLegalSiblingFPRegister(bool isFirst, uint64_t availRegMask=0x0000ffff);
 
    bool findBestFreeRegisterPair(TR::RealRegister** firstReg, TR::RealRegister** lastReg, TR_RegisterKinds rk,
-				    TR::Instruction* currInst, uint64_t availRegMask=0x0000ffff);
+                                 TR::Instruction* currInst, uint64_t availRegMask=0x0000ffff);
    void    freeBestRegisterPair(TR::RealRegister** firstReg, TR::RealRegister** lastReg, TR_RegisterKinds rk,
-			            TR::Instruction* currInst, uint64_t availRegMask=0x0000ffff);
+                                TR::Instruction* currInst, uint64_t availRegMask=0x0000ffff);
    void    freeBestFPRegisterPair(TR::RealRegister** firstReg, TR::RealRegister** lastReg,
-			            TR::Instruction* currInst, uint64_t availRegMask=0x0000ffff);
-   uint64_t filterColouredRegisterConflicts(TR::Register *targetRegister, TR::Register *siblingRegister, TR::Instruction *currInstr);
+                                  TR::Instruction* currInst, uint64_t availRegMask=0x0000ffff);
 
    // Access Register managed
    TR::RealRegister* findVirtRegInHighWordRegister(TR::Register *virtReg);
@@ -324,13 +310,8 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
    void allocateUpgradedBlockedList(TR_Stack<TR::RealRegister*> * mem);
    TR::RealRegister * getNextRegFromUpgradedBlockedList();
 
-   void blockVolatileAccessRegisters();
-   void unblockVolatileAccessRegisters();
-
    // High Register managed
    void spillAllVolatileHighRegisters(TR::Instruction  *currentInstruction);
-   void blockVolatileHighRegisters();
-   void unblockVolatileHighRegisters();
 
    // SINGLE REGISTERs methods
    uint64_t constructFreeRegBitVector(TR::Instruction  *currentInstruction);
@@ -381,15 +362,10 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
                                             TR::RealRegister::RegNum registerNumber,
                                             flags32_t       instFlags);
 
-
-   TR::CodeGenerator *cg() {return _cg;}
    TR_Debug         *getDebug();
 
    uint32_t *initializeGlobalRegisterTable();
    uint32_t initGlobalVectorRegisterMap(uint32_t vectorOffset);
-   void lockGlobalRegister(int32_t globalRegisterTableIndex);
-   void releaseGlobalRegister(int32_t globalRegisterTableIndex, TR::RealRegister::RegNum gReg);
-   int32_t findGlobalRegisterIndex(TR::RealRegister::RegNum gReg);
 
    void releaseLiteralPoolRegister();    // free up GPR6
 
@@ -398,24 +374,6 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
       {
       return _globalRegisterNumberToRealRegisterMap;
       }
-
-
-   /*************************** Access regs ***************************/
-
-
-   TR_GlobalRegisterNumber getFirstGlobalAccessRegisterNumber()
-      {
-      return _firstGlobalAccessRegisterNumber;
-      }
-
-   TR_GlobalRegisterNumber setFirstGlobalAccessRegisterNumber(TR_GlobalRegisterNumber reg);
-
-   TR_GlobalRegisterNumber getLastGlobalAccessRegisterNumber()
-       {
-       return _lastGlobalAccessRegisterNumber;
-       }
-
-   TR_GlobalRegisterNumber setLastGlobalAccessRegisterNumber(TR_GlobalRegisterNumber reg);
 
    TR_GlobalRegisterNumber getLastGlobalGPRRegisterNumber()
       {
@@ -627,8 +585,6 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
      return _lastLinkageFPR=reg;
      }
 
-   TR::Register * getAccessRegisterFromGlobalRegisterNumber(TR_GlobalRegisterNumber reg);
-
    TR::Register * getGPRFromGlobalRegisterNumber(TR_GlobalRegisterNumber reg);
 
    TR::Register * getHPRFromGlobalRegisterNumber(TR_GlobalRegisterNumber reg);
@@ -650,11 +606,6 @@ class OMR_EXTENSIBLE Machine : public OMR::Machine
       {
       memset(_registerAssociations, 0, sizeof(TR::Register *) * (TR::RealRegister::NumRegisters));
       }
-   bool supportLockedRegisterAssignment();
-
-   bool isRestrictedReg(TR::RealRegister::RegNum reg);
-
-   TR::RealRegister *getRegisterFile(int32_t i);
 
    void takeRegisterStateSnapShot();
    void restoreRegisterStateFromSnapShot();

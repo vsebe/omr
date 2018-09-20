@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,14 +19,14 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#ifndef OMR_COMPILATIONBASE_INCL
-#define OMR_COMPILATIONBASE_INCL
+#ifndef OMR_COMPILATION_INCL
+#define OMR_COMPILATION_INCL
 
 /*
  * The following #define and typedef must appear before any #includes in this file
  */
-#ifndef OMR_COMPILATIONBASE_CONNECTOR
-#define OMR_COMPILATIONBASE_CONNECTOR
+#ifndef OMR_COMPILATION_CONNECTOR
+#define OMR_COMPILATION_CONNECTOR
 namespace OMR { class Compilation; }
 namespace OMR { typedef OMR::Compilation CompilationConnector; }
 #endif
@@ -65,11 +65,8 @@ namespace OMR { typedef OMR::Compilation CompilationConnector; }
 #include "infra/ThreadLocal.h"                // for tlsSet
 #include "optimizer/Optimizations.hpp"        // for Optimizations, etc
 #include "ras/Debug.hpp"                      // for TR_DebugBase
-#include "ras/DebugCounter.hpp"               // for TR_DebugCounter, etc
+#include "ras/DebugCounter.hpp"               // for TR::DebugCounter, etc
 #include "ras/ILValidationStrategies.hpp"
-
-
-#include "omr.h"
 
 #include "il/symbol/ResolvedMethodSymbol.hpp"
 
@@ -424,6 +421,8 @@ public:
    TR::ResolvedMethodSymbol *getMethodSymbol();
    TR_ResolvedMethod *getCurrentMethod();
 
+   TR_ResolvedMethod *getMethodBeingCompiled() { return _method; }
+
    TR::PersistentInfo *getPersistentInfo();
 
    int32_t getCompThreadID() const { return _compThreadID; }
@@ -526,9 +525,6 @@ public:
    TR::list<TR::Snippet*> *getMethodSnippetsToBePatchedOnClassUnload() { return &_methodSnippetsToBePatchedOnClassUnload; }
    TR::list<TR::Snippet*> *getSnippetsToBePatchedOnClassRedefinition() { return &_snippetsToBePatchedOnClassRedefinition; }
    TR::list<TR_Pair<TR::Snippet,TR_ResolvedMethod> *> *getSnippetsToBePatchedOnRegisterNative() { return &_snippetsToBePatchedOnRegisterNative; }
-
-   bool useLongRegAllocation(){ return _useLongRegAllocation; }
-   void setUseLongRegAllocation(bool b){ _useLongRegAllocation = b; }
 
    void switchCodeCache(TR::CodeCache *newCodeCache);
    bool getCodeCacheSwitched() { return _codeCacheSwitched; }
@@ -675,6 +671,32 @@ public:
    void verifyCFG(TR::ResolvedMethodSymbol *s = 0);
 
    void setIlVerifier(TR::IlVerifier *ilVerifier) { _ilVerifier = ilVerifier; }
+
+   typedef std::pair<const void * const, TR::DebugCounterBase *> DebugCounterEntry;
+   typedef TR::typed_allocator<DebugCounterEntry, TR::Allocator> DebugCounterMapAllocator;
+   typedef std::map<const void *, TR::DebugCounterBase *, std::less<const void *>, DebugCounterMapAllocator> DebugCounterMap;
+
+   /**
+    * @brief mapStaticAddressToCounter
+    * @param symRef the symref containing the static address of the memory used to
+    *               store the count value of the debug counter
+    * @param counter pointer to the debug counter
+    *
+    * Maps the staticAddress of the symRef to the debug counter. The map has to be between the static address
+    * and the debug counter, instead of the symref of the static address and the debug counter, because sometimes,
+    * transformations can create a new symref that will not exist in this map; however because the static
+    * address is constant, it is guaranteed to exist in the map.
+    */
+   void mapStaticAddressToCounter(TR::SymbolReference *symRef, TR::DebugCounterBase *counter);
+
+   /**
+    * @brief getCounterFromStaticAddress
+    * @param symRef the symref containingthe static address of the memory used to
+    *               store the count value of the debug counter
+    * @return the debug counter associated with the static address
+    */
+   TR::DebugCounterBase *getCounterFromStaticAddress(TR::SymbolReference *symRef);
+
 
 #ifdef DEBUG
    void dumpMethodGraph(int index, TR::ResolvedMethodSymbol * = 0);
@@ -907,8 +929,8 @@ public:
    bool isDLT() { return _flags.testAny(IsDLTCompile);}
 
    // surely J9 specific
-   void * getAotMethodCodeStart() const { return _aotMethodCodeStart; }
-   void setAotMethodCodeStart(void *p) { _aotMethodCodeStart = p; }
+   void * getRelocatableMethodCodeStart() const { return _relocatableMethodCodeStart; }
+   void setRelocatableMethodCodeStart(void *p) { _relocatableMethodCodeStart = p; }
 
    bool getFailCHTableCommit() const { return _failCHtableCommitFlag; }
    void setFailCHTableCommit(bool v) { _failCHtableCommitFlag = v; }
@@ -942,6 +964,18 @@ public:
       CompilationPhaseScope(TR::Compilation *comp);
       ~CompilationPhaseScope();
       };
+
+   /**
+    * @brief getDebugCounterMap
+    * @return reference to the TR::DebugCounterMap map
+    */
+   DebugCounterMap &getDebugCounterMap() { return _debugCounterMap; }
+
+   /**
+    *  @brief needRelocationsForStatics
+    *  @return whether static data addresses need to be relocated
+    */
+   bool needRelocationsForStatics() { return true; }
 
 
 public:
@@ -1099,7 +1133,6 @@ private:
    bool                              _loopVersionedWrtAsyncChecks;
    bool                              _codeCacheSwitched;
    bool                              _commitedCallSiteInfo;
-   bool                              _useLongRegAllocation;
    bool                              _containsBigDecimalLoad;
    bool                              _isOptServer;
    bool                              _isServerInlining;
@@ -1132,6 +1165,14 @@ private:
    ToStringMap    _toStringMap; // maps TR_SymbolReference, etc. objects to strings
    ToCommentMap   _toCommentMap; // maps list of strings, etc. objects to list of strings
 
+   /**
+    * @brief _debugCounterMap
+    *
+    * A map between the static address of the memory used to store the count value of
+    * the debug counter and the debug counter
+    */
+   DebugCounterMap _debugCounterMap;
+
 
 
    int32_t                           _verboseOptTransformationCount;
@@ -1143,7 +1184,7 @@ protected:
 #endif
 
 private:
-   void *                            _aotMethodCodeStart;
+   void *                            _relocatableMethodCodeStart;
    const int32_t                     _compThreadID; // The ID of the supporting compilation thread; 0 for compilation an application thread
    volatile bool                     _failCHtableCommitFlag;
 

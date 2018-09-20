@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,8 +19,8 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#ifndef IA32CONSTANTDATASNIPPET_INCL
-#define IA32CONSTANTDATASNIPPET_INCL
+#ifndef X86CONSTANTDATASNIPPET_INCL
+#define X86CONSTANTDATASNIPPET_INCL
 
 #include "x/codegen/DataSnippet.hpp"
 
@@ -32,14 +32,12 @@ namespace TR { class Node; }
 
 namespace TR {
 
-class IA32ConstantDataSnippet : public TR::IA32DataSnippet
+class X86ConstantDataSnippet : public TR::X86DataSnippet
    {
    public:
 
-   IA32ConstantDataSnippet(TR::CodeGenerator *cg, TR::Node *, void *c, uint8_t size);
-
+   inline X86ConstantDataSnippet(TR::CodeGenerator *cg, TR::Node *n, void *c, size_t size) : TR::X86DataSnippet(cg, n, c, size) { }
    virtual Kind getKind() { return IsConstantData; }
-   uint8_t getConstantSize()  { return getDataSize(); }
    };
 
 }

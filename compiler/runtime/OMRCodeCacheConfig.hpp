@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -26,8 +26,8 @@
  * The following #define and typedef must appear before any #includes in this file
  */
 
-#ifndef OMR_CODECACHECONFIG_COMPOSED
-#define OMR_CODECACHECONFIG_COMPOSED
+#ifndef OMR_CODECACHECONFIG_CONNECTOR
+#define OMR_CODECACHECONFIG_CONNECTOR
 namespace OMR { class CodeCacheConfig; }
 namespace OMR { typedef CodeCacheConfig CodeCacheConfigConnector; }
 #endif
@@ -105,8 +105,8 @@ class OMR_EXTENSIBLE CodeCacheConfig
          _verboseReclamation(false),
          _doSanityChecks(false),
          _codeCacheFreeBlockRecylingEnabled(false),
-         _emitElfObject(false),
-         _emitELFObjectFile(false)
+         _emitExecutableELF(false),
+         _emitRelocatableELF(false)
       {
       #if defined(J9ZOS390)     // EBCDIC
       _warmEyeCatcher[0] = '\xD1';
@@ -174,8 +174,8 @@ class OMR_EXTENSIBLE CodeCacheConfig
 
    CodeCacheCodeGenCallbacks & mccCallbacks() { return _mccCallbacks; }
 
-   bool emitElfObject() const { return _emitElfObject; }
-   bool emitELFObjectFile() const { return _emitELFObjectFile; }
+   bool emitExecutableELF() const { return _emitExecutableELF; }
+   bool emitRelocatableELF() const { return _emitRelocatableELF; }
 
    int32_t _trampolineCodeSize;          /*!< size of the trampoline code in bytes */
    int32_t _CCPreLoadedCodeSize;         /*!< size of the pre-Loaded CodeCache Helpers code in bytes */
@@ -204,8 +204,8 @@ class OMR_EXTENSIBLE CodeCacheConfig
 
    CodeCacheCodeGenCallbacks _mccCallbacks;              /*!< codeGen call backs */
 
-   bool _emitElfObject;                  /*!< emit code cache as ELF object on shutdown */
-   bool _emitELFObjectFile;
+   bool _emitExecutableELF;                  /*!< emit code cache as ELF object on shutdown */
+   bool _emitRelocatableELF;
 
    char * const warmEyeCatcher() { return _warmEyeCatcher; }
 

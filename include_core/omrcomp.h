@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -255,7 +255,7 @@ typedef double SYS_FLOAT;
 #define HAS_BUILTIN_EXPECT
 #endif /* RS6000 */
 
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 typedef double 					SYS_FLOAT;
 
 #define NO_LVALUE_CASTING
@@ -294,7 +294,7 @@ typedef double 					SYS_FLOAT;
 /* Only for use on static functions */
 #define VMINLINE_ALWAYS __forceinline
 #endif /* __GNUC__ */
-#endif /* WIN32 */
+#endif /* defined(OMR_OS_WINDOWS) */
 
 #if defined(J9ZOS390)
 typedef double				SYS_FLOAT;
@@ -318,6 +318,10 @@ typedef struct {
 	void *rawFnAddress;
 } J9FunctionDescriptor_T;
 
+// Set the Address Enviroment pointer.  Same for all routines from
+// same library, so doesn't matter which routine, but currently only
+// used when calling jitProfile* in zOS, so use one of them
+#define TOC_UNWRAP_ENV(wrappedPointer) (wrappedPointer ? ((J9FunctionDescriptor_T *) (wrappedPointer))->ada : NULL)
 #define TOC_UNWRAP_ADDRESS(wrappedPointer) (wrappedPointer ? ((J9FunctionDescriptor_T *)(uintptr_t)(wrappedPointer))->rawFnAddress : NULL)
 
 
@@ -335,6 +339,8 @@ typedef struct {
 
 #endif /* __cplusplus */
 
+#else
+#define TOC_UNWRAP_ENV(wrappedPointer) 0xdeafbeef
 #endif /* J9ZOS390 */
 
 #ifndef J9CONST64
@@ -575,6 +581,7 @@ typedef struct U_128 {
 #define OMR_ARE_ANY_BITS_SET(value, bits) (0 != ((value) & (bits)))
 #define OMR_ARE_ALL_BITS_SET(value, bits) ((bits) == ((value) & (bits)))
 #define OMR_ARE_NO_BITS_SET(value, bits) (!OMR_ARE_ANY_BITS_SET(value, bits))
+#define OMR_IS_ONLY_ONE_BIT_SET(value) (0 == (value & (value - 1)))
 
 /* Workaround for gcc -Wunused-result, which was added in 4.5.4 */
 #if defined(__GNUC__) && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 5)))

@@ -200,7 +200,7 @@ bool TR_LoopVersioner::loopIsWorthVersioning(TR_RegionStructure *naturalLoop)
       }
 
    // if aggressive loop versioner flag is set then run at any optlevel, otherwise only at warm or less
-   bool aggressive = TR::Options::getCmdLineOptions()->getOption(TR_EnableAggressiveLoopVersioning);
+   bool aggressive = comp()->getOption(TR_EnableAggressiveLoopVersioning);
    if (aggressive || comp()->getMethodHotness() <= warm)
       {
       if (naturalLoop->getParent())
@@ -225,7 +225,7 @@ bool TR_LoopVersioner::loopIsWorthVersioning(TR_RegionStructure *naturalLoop)
             }
          }
 
-      bool aggressive = TR::Options::getCmdLineOptions()->getOption(TR_EnableAggressiveLoopVersioning);
+      bool aggressive = comp()->getOption(TR_EnableAggressiveLoopVersioning);
 
       int32_t lvBlockFreqCutoff;
       static const char * b = feGetEnv("TR_LoopVersionerFreqCutoff");
@@ -567,7 +567,7 @@ int32_t TR_LoopVersioner::performWithoutDominators()
          {
          // default hotness threshold
          TR_Hotness hotnessThreshold = hot;
-         if (TR::Options::getCmdLineOptions()->getOption(TR_EnableAggressiveLoopVersioning))
+         if (comp()->getOption(TR_EnableAggressiveLoopVersioning))
             {
             if (trace()) traceMsg(comp(), "aggressiveLoopVersioning: raising hotnessThreshold for conditionalsWillBeEliminated\n");
             hotnessThreshold = maxHotness; // threshold which can't be matched by the > operator
@@ -712,7 +712,7 @@ int32_t TR_LoopVersioner::performWithoutDominators()
    ////if (!_virtualGuardPairs.isEmpty())
    if (!_virtualGuardInfo.isEmpty())
       {
-      bool disableLT = TR::Options::getCmdLineOptions()->getOption(TR_DisableLoopTransfer);
+      bool disableLT = comp()->getOption(TR_DisableLoopTransfer);
       if (!disableLT)
          performLoopTransfer();
       }
@@ -3204,7 +3204,7 @@ bool TR_LoopVersioner::detectChecksToBeEliminated(TR_RegionStructure *whileLoop,
 
          // If the aggressive loop versioning flag is set, only do the unimportant block test
          // at lower optlevels
-         bool aggressive = TR::Options::getCmdLineOptions()->getOption(TR_EnableAggressiveLoopVersioning);
+         bool aggressive = comp()->getOption(TR_EnableAggressiveLoopVersioning);
 
          static const bool useOuterHeader =
             feGetEnv("TR_loopVersionerUseOuterHeaderForImportance") != NULL;
@@ -3252,7 +3252,7 @@ bool TR_LoopVersioner::detectChecksToBeEliminated(TR_RegionStructure *whileLoop,
             )
             {
             isUnimportant = true;
-            if (trace() || comp()->getOptions()->getOption(TR_CountOptTransformations))
+            if (trace() || comp()->getOption(TR_CountOptTransformations))
                {
                for (TR::TreeTop *tt = entryTree; isUnimportant && tt != exitTree; tt = tt->getNextTreeTop())
                   {
@@ -3315,7 +3315,7 @@ bool TR_LoopVersioner::detectChecksToBeEliminated(TR_RegionStructure *whileLoop,
          vcount_t visitCount = comp()->incVisitCount(); //@TODO: unsafe API/use pattern
          updateDefinitionsAndCollectProfiledExprs(NULL, currentNode, visitCount, specializedInvariantNodes, invariantNodes, invariantTranslationNodesList, NULL, collectProfiledExprs, nextBlock, warmBranchCount);
 
-         bool disableLT = TR::Options::getCmdLineOptions()->getOption(TR_DisableLoopTransfer);
+         bool disableLT = comp()->getOption(TR_DisableLoopTransfer);
          if (!disableLT &&
              currentNode->isTheVirtualGuardForAGuardedInlinedCall() &&
              blocksInWhileLoop.find(currentNode->getBranchDestination()->getNode()->getBlock()))
@@ -3791,7 +3791,7 @@ void TR_LoopVersioner::versionNaturalLoop(TR_RegionStructure *whileLoop, List<TR
          }
 
       TR::Node *lastTree = nextBlock->getLastRealTreeTop()->getNode();
-      bool disableLT = TR::Options::getCmdLineOptions()->getOption(TR_DisableLoopTransfer);
+      bool disableLT = comp()->getOption(TR_DisableLoopTransfer);
       if (!disableLT &&
           lastTree->getOpCode().isIf() &&
           blocksInWhileLoop.find(lastTree->getBranchDestination()->getNode()->getBlock()) &&
@@ -4255,7 +4255,7 @@ void TR_LoopVersioner::versionNaturalLoop(TR_RegionStructure *whileLoop, List<TR
    TR_Hotness hotnessThreshold = hot;
 
    // If aggressive loop versioning is requested, don't call buildNullCheckComparisonsTree based on hotness
-   if (TR::Options::getCmdLineOptions()->getOption(TR_EnableAggressiveLoopVersioning))
+   if (comp()->getOption(TR_EnableAggressiveLoopVersioning))
       {
       if (trace()) traceMsg(comp(), "aggressiveLoopVersioning: raising hotnessThreshold for buildNullCheckComparisonsTree\n");
       hotnessThreshold = maxHotness; // threshold which can't be matched by the > operator
@@ -7576,19 +7576,81 @@ void TR_LoopVersioner::collectAllExpressionsToBeChecked(List<TR::TreeTop> *nullC
 
             TR_OpaqueClassBlock *cl = NULL;
             if (sig && (len > 0))
-               cl = fe()->getClassFromSignature(sig, len, otherSymRef->getOwningMethod(comp()));
+               {
+               // Currently it's not possible to use this class to eliminate
+               // the type check in AOT. That would require a verification
+               // record to check the subtyping relationship.
+               cl = fe()->getClassFromSignature(sig, len, symRef->getOwningMethod(comp()));
+               }
 
             int32_t otherLen;
             char *otherSig = otherSymRef->getOwningMethod(comp())->classNameOfFieldOrStatic(otherSymRef->getCPIndex(), otherLen);
             dumpOptDetails(comp(), "For node %p len %d other len %d sig %p other sig %p\n", node, len, otherLen, sig, otherSig);
-            if (otherSig)
-               otherClassObject = otherSymRef->getOwningMethod(comp())->getDeclaringClassFromFieldOrStatic(comp(),otherSymRef->getCPIndex());
+            TR::ResolvedMethodSymbol *owningMethodSym = otherSymRef->getOwningMethodSymbol(comp());
+            int32_t classCPI = 0;
+            int32_t fieldCPI = otherSymRef->getCPIndex();
+            instanceOfReqd = false;
+            if (otherSymRef->getSymbol()->isShadow() && fieldCPI >= 0)
+               {
+               TR_ResolvedMethod *owningMethod = owningMethodSym->getResolvedMethod();
+               classCPI = owningMethod->classCPIndexOfFieldOrStatic(fieldCPI);
+               bool aotOK = true;
+               otherClassObject = owningMethod->getClassFromConstantPool(comp(), classCPI, aotOK);
+               instanceOfReqd = true;
+               }
+#ifdef J9_PROJECT_SPECIFIC
+            else
+               {
+               switch (otherSymRef->getReferenceNumber() - comp()->getSymRefTab()->getNumHelperSymbols())
+                  {
+                  case TR::SymbolReferenceTable::classFromJavaLangClassSymbol:
+                  case TR::SymbolReferenceTable::classFromJavaLangClassAsPrimitiveSymbol:
+                     {
+                     bool aotOK = true;
+                     otherClassObject = comp()->getClassClassPointer(aotOK);
+                     classCPI = -1;
+                     instanceOfReqd = true;
+                     break;
+                     }
+                  }
+               }
+#endif
 
-            //the call to findOrCreateClassSymbol is safe even though we pass CPI of -1 since the call above getClassFromSignature is not vetted for AOT
-            if (cl && otherClassObject && (fe()->isInstanceOf(cl, otherClassObject, true) == TR_yes))
+            if (!instanceOfReqd)
+               {
+               // nothing to do
+               }
+            else if (otherClassObject == NULL)
+               {
+               // A type test against the class that's expected to have the
+               // field is mandatory but the class pointer is not forthcoming.
+               // At this point it would be difficult to prevent the
+               // transformation responsible for hoisting this load.
+               traceMsg(
+                  comp(),
+                  "failed to find class from field #%d\n",
+                  otherSymRef->getReferenceNumber());
+               comp()->failCompilation<TR::CompilationException>(
+                  "failed to find class from field during versioning");
+               }
+            else if (cl != NULL && fe()->isInstanceOf(cl, otherClassObject, true) == TR_yes)
+               {
                instanceOfReqd = false;
-            else if (otherClassObject)
-               duplicateClassPtr = TR::Node::createWithSymRef(node, TR::loadaddr, 0, comp()->getSymRefTab()->findOrCreateClassSymbol(otherSymRef->getOwningMethodSymbol(comp()), -1, otherClassObject, false));
+               }
+            else
+               {
+               TR::SymbolReference *otherClassSymRef =
+                  comp()->getSymRefTab()->findOrCreateClassSymbol(
+                     owningMethodSym,
+                     classCPI,
+                     otherClassObject);
+
+               duplicateClassPtr = TR::Node::createWithSymRef(
+                  node,
+                  TR::loadaddr,
+                  0,
+                  otherClassSymRef);
+               }
             }
          }
 
@@ -7596,43 +7658,39 @@ void TR_LoopVersioner::collectAllExpressionsToBeChecked(List<TR::TreeTop> *nullC
          {
          if (otherClassObject)
             {
-            if (performTransformation(comp(), "%s Creating test outside loop for checking if %p is of the correct type\n", OPT_DETAILS_LOOP_VERSIONER, node->getFirstChild()))
-               {
-               TR::Node *duplicateCheckedValue = node->getFirstChild()->duplicateTreeForCodeMotion();
-               TR::Node *instanceofNode = TR::Node::createWithSymRef(TR::instanceof, 2, 2, duplicateCheckedValue,  duplicateClassPtr, comp()->getSymRefTab()->findOrCreateInstanceOfSymbolRef(comp()->getMethodSymbol()));
-               TR::Node *ificmpeqNode =  TR::Node::createif(TR::ificmpeq, instanceofNode, TR::Node::create(node, TR::iconst, 0, 0), exitGotoBlock->getEntry());
-               comparisonTrees->add(ificmpeqNode);
-               dumpOptDetails(comp(), "The node %p has been created for testing if object is of the right type\n", ificmpeqNode);
-               //printf("The node %p has been created for testing if object is of the right type in %s\n", ificmpeqNode, comp()->signature());
-               //fflush(stdout);
-               }
+            dumpOptDetails(comp(), "%s Creating test outside loop for checking if %p is of the correct type\n", OPT_DETAILS_LOOP_VERSIONER, node->getFirstChild());
+            TR::Node *duplicateCheckedValue = node->getFirstChild()->duplicateTreeForCodeMotion();
+            TR::Node *instanceofNode = TR::Node::createWithSymRef(TR::instanceof, 2, 2, duplicateCheckedValue,  duplicateClassPtr, comp()->getSymRefTab()->findOrCreateInstanceOfSymbolRef(comp()->getMethodSymbol()));
+            TR::Node *ificmpeqNode =  TR::Node::createif(TR::ificmpeq, instanceofNode, TR::Node::create(node, TR::iconst, 0, 0), exitGotoBlock->getEntry());
+            comparisonTrees->add(ificmpeqNode);
+            dumpOptDetails(comp(), "The node %p has been created for testing if object is of the right type\n", ificmpeqNode);
+            //printf("The node %p has been created for testing if object is of the right type in %s\n", ificmpeqNode, comp()->signature());
+            //fflush(stdout);
             }
          else if (testIsArray)
             {
 #ifdef J9_PROJECT_SPECIFIC
-            if (performTransformation(comp(), "%s Creating test outside loop for checking if %p is of array type\n", OPT_DETAILS_LOOP_VERSIONER, node->getFirstChild()))
+            dumpOptDetails(comp(), "%s Creating test outside loop for checking if %p is of array type\n", OPT_DETAILS_LOOP_VERSIONER, node->getFirstChild());
+            TR::Node *duplicateCheckedValue = node->getFirstChild()->duplicateTreeForCodeMotion();
+            TR::Node *vftLoad = TR::Node::createWithSymRef(TR::aloadi, 1, 1, duplicateCheckedValue, comp()->getSymRefTab()->findOrCreateVftSymbolRef());
+            //TR::Node *componentTypeLoad = TR::Node::create(TR::aloadi, 1, vftLoad, comp()->getSymRefTab()->findOrCreateArrayComponentTypeSymbolRef());
+            TR::Node *classFlag = NULL;
+            if (TR::Compiler->target.is32Bit())
                {
-               TR::Node *duplicateCheckedValue = node->getFirstChild()->duplicateTreeForCodeMotion();
-               TR::Node *vftLoad = TR::Node::createWithSymRef(TR::aloadi, 1, 1, duplicateCheckedValue, comp()->getSymRefTab()->findOrCreateVftSymbolRef());
-               //TR::Node *componentTypeLoad = TR::Node::create(TR::aloadi, 1, vftLoad, comp()->getSymRefTab()->findOrCreateArrayComponentTypeSymbolRef());
-               TR::Node *classFlag = NULL;
-               if (TR::Compiler->target.is32Bit())
-                  {
-                  classFlag = TR::Node::createWithSymRef(TR::iloadi, 1, 1, vftLoad, comp()->getSymRefTab()->findOrCreateClassAndDepthFlagsSymbolRef());
-                  }
-               else
-                  {
-                  classFlag = TR::Node::createWithSymRef(TR::lloadi, 1, 1, vftLoad, comp()->getSymRefTab()->findOrCreateClassAndDepthFlagsSymbolRef());
-                  classFlag = TR::Node::create(TR::l2i, 1, classFlag);
-                  }
-               TR::Node *andConstNode = TR::Node::create(classFlag, TR::iconst, 0, TR::Compiler->cls.flagValueForArrayCheck(comp()));
-               TR::Node * andNode   = TR::Node::create(TR::iand, 2, classFlag, andConstNode);
-               TR::Node *cmp = TR::Node::createif(TR::ificmpne, andNode, andConstNode, exitGotoBlock->getEntry());
-               comparisonTrees->add(cmp);
-               dumpOptDetails(comp(), "The node %p has been created for testing if object is of array type\n", cmp);
-               //printf("The node %p has been created for testing if object is of array type in %s\n", cmp, comp()->signature());
-               //fflush(stdout);
+               classFlag = TR::Node::createWithSymRef(TR::iloadi, 1, 1, vftLoad, comp()->getSymRefTab()->findOrCreateClassAndDepthFlagsSymbolRef());
                }
+            else
+               {
+               classFlag = TR::Node::createWithSymRef(TR::lloadi, 1, 1, vftLoad, comp()->getSymRefTab()->findOrCreateClassAndDepthFlagsSymbolRef());
+               classFlag = TR::Node::create(TR::l2i, 1, classFlag);
+               }
+            TR::Node *andConstNode = TR::Node::create(classFlag, TR::iconst, 0, TR::Compiler->cls.flagValueForArrayCheck(comp()));
+            TR::Node * andNode   = TR::Node::create(TR::iand, 2, classFlag, andConstNode);
+            TR::Node *cmp = TR::Node::createif(TR::ificmpne, andNode, andConstNode, exitGotoBlock->getEntry());
+            comparisonTrees->add(cmp);
+            dumpOptDetails(comp(), "The node %p has been created for testing if object is of array type\n", cmp);
+            //printf("The node %p has been created for testing if object is of array type in %s\n", cmp, comp()->signature());
+            //fflush(stdout);
 #endif
             }
          else

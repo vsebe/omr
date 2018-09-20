@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2015, 2017 IBM Corp. and others
+# Copyright (c) 2015, 2018 IBM Corp. and others
 # 
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -188,6 +188,11 @@ ifeq (ppc,$(OMR_HOST_ARCH))
     OBJECTS += auxv
   endif
 endif
+ifeq (s390,$(OMR_HOST_ARCH))
+  ifeq (linux,$(OMR_HOST_OS))
+    OBJECTS += auxv
+  endif
+endif
 ifeq (1,$(OMR_OPT_CUDA))
   OBJECTS += omrcuda
 endif
@@ -260,6 +265,11 @@ ifeq ($(OMR_HOST_OS),$(filter $(OMR_HOST_OS),linux linux_ztpf))
     vpath % $(PORT_SRCDIR)linuxarm
     MODULE_INCLUDES += $(PORT_SRCDIR)linuxarm
   endif
+  
+  ifeq (aarch64,$(OMR_HOST_ARCH))
+    vpath % $(PORT_SRCDIR)linuxaarch64
+    MODULE_INCLUDES += $(PORT_SRCDIR)linuxaarch64
+  endif
 
   ifeq (x86,$(OMR_HOST_ARCH))
     ifeq (1,$(OMR_ENV_DATA64))
@@ -312,16 +322,6 @@ omrsyslog.obj: omrsyslogmessages.res
 endif
 
 ifeq (linux,$(OMR_HOST_OS))
-
-# Linux standard headers have some functions marked with the attribute "warn_unused_result".
-  ifeq (gcc,$(OMR_TOOLCHAIN))
-omrfile.o: MODULE_CFLAGS+=-Wno-error
-omrfiletext.o: MODULE_CFLAGS+=-Wno-error
-omrintrospect.o: MODULE_CFLAGS+=-Wno-error
-omrosdump.o: MODULE_CFLAGS+=-Wno-error
-omrosdump_helpers.o: MODULE_CFLAGS+=-Wno-error
-omrsysinfo.o: MODULE_CFLAGS+=-Wno-error
-  endif
 
   ifeq (s390,$(OMR_HOST_ARCH))
     # OMRTODO: This is to get around a compiler bug:

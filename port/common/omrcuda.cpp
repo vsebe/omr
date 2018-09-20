@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2013, 2017 IBM Corp. and others
+ * Copyright (c) 2013, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -752,7 +752,7 @@ openDriver(OMRPortLibrary *portLibrary)
 	const char *driverLibrary = "libcuda.so";
 #elif defined(OSX)
 	const char *driverLibrary = "libcuda.dylib";
-#elif defined(WIN32)
+#elif defined(OMR_OS_WINDOWS)
 	const char *driverLibrary = "nvcuda.dll";
 #endif /* defined(LINUX) */
 	J9CudaGlobalData *globals = &portLibrary->portGlobals->cudaGlobals;
@@ -988,9 +988,9 @@ const J9CudaLibraryDescriptor runtimeLibraries[] = {
 #   define OMRCUDA_LIBRARY_NAME(major, minor) ("libcudart.so." #major "." #minor)
 #elif defined(OSX)
 #   define OMRCUDA_LIBRARY_NAME(major, minor) ("libcudart." #major "." #minor ".dylib")
-#elif defined(WIN32) && defined(OMR_ENV_DATA64)
+#elif defined(OMR_OS_WINDOWS) && defined(OMR_ENV_DATA64)
 #   define OMRCUDA_LIBRARY_NAME(major, minor) ("cudart64_" #major #minor ".dll")
-#elif defined(WIN32)
+#elif defined(OMR_OS_WINDOWS)
 #   define OMRCUDA_LIBRARY_NAME(major, minor) ("cudart32_" #major #minor ".dll")
 #endif /* defined(LINUX) && defined(OMR_ENV_DATA64) */
 
@@ -999,6 +999,14 @@ const J9CudaLibraryDescriptor runtimeLibraries[] = {
 /*
  * Include forward-compatible support for runtime libraries.
  */
+#if CUDA_VERSION <= 9020
+	OMRCUDA_LIBRARY_ENTRY(9, 2),
+#endif /* CUDA_VERSION <= 9020 */
+
+#if CUDA_VERSION <= 9010
+	OMRCUDA_LIBRARY_ENTRY(9, 1),
+#endif /* CUDA_VERSION <= 9010 */
+
 #if CUDA_VERSION <= 9000
 	OMRCUDA_LIBRARY_ENTRY(9, 0),
 #endif /* CUDA_VERSION <= 9000 */

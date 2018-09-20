@@ -102,6 +102,10 @@ MM_GCExtensionsBase::initialize(MM_EnvironmentBase* env)
 	excessiveGCStats.endGCTimeStamp = omrtime_hires_clock();
 	excessiveGCStats.lastEndGlobalGCTimeStamp = excessiveGCStats.endGCTimeStamp;
 
+        /* Get usable physical memory from portlibrary. This is used by computeDefaultMaxHeap().
+	 * It can also be used by downstream projects to compute project specific GC parameters.
+	 */
+	usablePhysicalMemory = omrsysinfo_get_addressable_physical_memory();
 
 	computeDefaultMaxHeap(env);
 
@@ -176,15 +180,6 @@ MM_GCExtensionsBase::initialize(MM_EnvironmentBase* env)
 		goto failed;
 	}
 
-#if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
-	if(scavengerTraceHotFields) {
-		scavengerHotFieldStats = MM_ScavengerHotFieldStats::newInstance(this);
-		if (NULL == scavengerHotFieldStats) {
-			goto failed;
-		}
-	}
-#endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
-
 	return true;
 
 failed:
@@ -211,13 +206,6 @@ MM_GCExtensionsBase::validateDefaultPageParameters(uintptr_t pageSize, uintptr_t
 void
 MM_GCExtensionsBase::tearDown(MM_EnvironmentBase* env)
 {
-#if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
-	if (NULL != scavengerHotFieldStats) {
-		scavengerHotFieldStats->kill(this);
-		scavengerHotFieldStats = NULL;
-	}
-#endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
-
 #if defined(OMR_GC_MODRON_SCAVENGER)
 	rememberedSet.tearDown(env);
 #endif /* OMR_GC_MODRON_SCAVENGER */
@@ -265,7 +253,11 @@ bool
 MM_GCExtensionsBase::isConcurrentScavengerInProgress()
 {
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
-	return scavenger->isConcurrentInProgress();
+	if (NULL != scavenger) {
+		return scavenger->isConcurrentInProgress();
+	} else {
+		return false;
+	}
 #else
 	return false;
 #endif
@@ -289,16 +281,8 @@ MM_GCExtensionsBase::identityHashDataRemoveRange(MM_EnvironmentBase* env, MM_Mem
 void
 MM_GCExtensionsBase::computeDefaultMaxHeap(MM_EnvironmentBase* env)
 {
-	uint64_t usableMemory = 0;
-	uint64_t memoryToRequest = 0;
-
-	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-
-	/* Initial memory as returned by port library API. */
-	usableMemory = omrsysinfo_get_addressable_physical_memory();
-
 	/* we are going to try to request a slice of half the usable memory */
-	memoryToRequest = (usableMemory / 2);
+	uint64_t memoryToRequest = (usablePhysicalMemory / 2);
 
 #define J9_PHYSICAL_MEMORY_MAX (uint64_t)(512 * 1024 * 1024)
 #define J9_PHYSICAL_MEMORY_DEFAULT (16 * 1024 * 1024)

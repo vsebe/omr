@@ -1169,6 +1169,10 @@ TR::X86RegImmSymInstruction::autoSetReloKind()
       {
       setReloKind(TR_DataAddress);
       }
+   else if (symbol->isDebugCounter())
+      {
+      setReloKind(TR_DebugCounter);
+      }
    }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1205,9 +1209,9 @@ TR::X86RegRegRegInstruction::X86RegRegRegInstruction(TR_X86OpCodes op,
                                                          TR::Register   *slreg,
                                                          TR::Register   *srreg,
                                                          TR::CodeGenerator *cg)
-   : TR::X86RegRegInstruction(slreg, treg, node, op, cg), _sourceRightRegister(srreg)
+   : TR::X86RegRegInstruction(srreg, treg, node, op, cg), _source2ndRegister(slreg)
    {
-   useRegister(srreg);
+   useRegister(slreg);
    }
 
 TR::X86RegRegRegInstruction::X86RegRegRegInstruction(TR::Instruction *precedingInstruction,
@@ -1216,10 +1220,9 @@ TR::X86RegRegRegInstruction::X86RegRegRegInstruction(TR::Instruction *precedingI
                                                          TR::Register    *slreg,
                                                          TR::Register    *srreg,
                                                          TR::CodeGenerator *cg)
-   : TR::X86RegRegInstruction(slreg, treg, op, precedingInstruction, cg),
-     _sourceRightRegister(srreg)
+   : TR::X86RegRegInstruction(srreg, treg, op, precedingInstruction, cg), _source2ndRegister(slreg)
    {
-   useRegister(srreg);
+   useRegister(slreg);
    }
 
 TR::X86RegRegRegInstruction::X86RegRegRegInstruction(TR_X86OpCodes                       op,
@@ -1229,9 +1232,9 @@ TR::X86RegRegRegInstruction::X86RegRegRegInstruction(TR_X86OpCodes              
                                                          TR::Register                         *srreg,
                                                          TR::RegisterDependencyConditions  *cond,
                                                          TR::CodeGenerator *cg)
-   : TR::X86RegRegInstruction(cond, slreg, treg, node, op, cg), _sourceRightRegister(srreg)
+   : TR::X86RegRegInstruction(cond, srreg, treg, node, op, cg), _source2ndRegister(slreg)
    {
-   useRegister(srreg);
+   useRegister(slreg);
    }
 
 TR::X86RegRegRegInstruction::X86RegRegRegInstruction(TR::Instruction                      *precedingInstruction,
@@ -1241,16 +1244,16 @@ TR::X86RegRegRegInstruction::X86RegRegRegInstruction(TR::Instruction            
                                                          TR::Register                         *srreg,
                                                          TR::RegisterDependencyConditions  *cond,
                                                          TR::CodeGenerator *cg)
-   : TR::X86RegRegInstruction(cond, slreg, treg, op, precedingInstruction, cg), _sourceRightRegister(srreg)
+   : TR::X86RegRegInstruction(cond, srreg, treg, op, precedingInstruction, cg), _source2ndRegister(slreg)
    {
-   useRegister(srreg);
+   useRegister(slreg);
    }
 
 bool TR::X86RegRegRegInstruction::refsRegister(TR::Register *reg)
    {
    if (reg == getTargetRegister() ||
        reg == getSourceRegister() ||
-       reg == getSourceRightRegister())
+       reg == getSource2ndRegister())
       {
       return true;
       }
@@ -1281,7 +1284,7 @@ bool TR::X86RegRegRegInstruction::usesRegister(TR::Register *reg)
    if ((reg == getTargetRegister() &&
         getOpCode().usesTarget())  ||
        reg == getSourceRegister()  ||
-       reg == getSourceRightRegister())
+       reg == getSource2ndRegister())
       {
       return true;
       }
@@ -1298,7 +1301,7 @@ void TR::X86RegRegRegInstruction::assignRegisters(TR_RegisterKinds kindsToBeAssi
    aboutToAssignRegDeps();
    aboutToAssignTargetRegister();
    aboutToAssignSourceRegister();
-   aboutToAssignSourceRightRegister();
+   aboutToAssignSource2ndRegister();
 
    if ((cg()->getAssignmentDirection() == cg()->Backward))
       {
@@ -1306,17 +1309,19 @@ void TR::X86RegRegRegInstruction::assignRegisters(TR_RegisterKinds kindsToBeAssi
          {
          getTargetRegister()->block();
          getSourceRegister()->block();
-         getSourceRightRegister()->block();
+         getSource2ndRegister()->block();
          getDependencyConditions()->assignPostConditionRegisters(this, kindsToBeAssigned, cg());
          getTargetRegister()->unblock();
          getSourceRegister()->unblock();
-         getSourceRightRegister()->unblock();
+         getSource2ndRegister()->unblock();
          }
       }
 
-   TR_RegisterSizes firstRequestedRegSize  = TR_WordReg;
-   TR_RegisterSizes secondRequestedRegSize = TR_WordReg;
-   TR_RegisterSizes thirdRequestedRegSize  = TR_WordReg;
+   TR_RegisterSizes firstRequestedRegSize  = getOpCode().hasByteTarget() ? TR_ByteReg :
+                                             getOpCode().hasXMMTarget() ? TR_QuadWordReg :  TR_WordReg;
+   TR_RegisterSizes secondRequestedRegSize = getOpCode().hasByteSource() ? TR_ByteReg :
+                                             getOpCode().hasXMMSource()  ? TR_QuadWordReg : TR_WordReg;
+   TR_RegisterSizes thirdRequestedRegSize  = secondRequestedRegSize;
 
    if (kindsToBeAssigned & getTargetRegister()->getKindAsMask())
       {
@@ -1326,20 +1331,11 @@ void TR::X86RegRegRegInstruction::assignRegisters(TR_RegisterKinds kindsToBeAssi
 
       firstRegister  = getTargetRegister();
       secondRegister = getSourceRegister();
-      thirdRegister  = getSourceRightRegister();
+      thirdRegister  = getSource2ndRegister();
 
       aboutToAssignRegister(firstRegister,  TR_ifUses64bitTarget, TR_ifModifies32or64bitTarget);
       aboutToAssignRegister(secondRegister, TR_if64bitSource,     TR_ifModifies32or64bitSource);
       aboutToAssignRegister(thirdRegister,  TR_if64bitSource,     TR_ifModifies32or64bitSource);
-
-      if (getOpCode().hasByteTarget())
-         {
-         firstRequestedRegSize = TR_ByteReg;
-         }
-      if (getOpCode().hasByteSource())
-         {
-         secondRequestedRegSize = TR_ByteReg;
-         }
 
       secondRegister->block();
       thirdRegister->block();
@@ -1466,8 +1462,8 @@ void TR::X86RegRegRegInstruction::assignRegisters(TR_RegisterKinds kindsToBeAssi
          }
 
       setTargetRegister(assignedFirstRegister);
-      setSourceRightRegister(assignedThirdRegister);
       setSourceRegister(assignedSecondRegister);
+      setSource2ndRegister(assignedThirdRegister);
       secondRegister->unblock();
       firstRegister->unblock();
       if (getDependencyConditions())
@@ -1480,11 +1476,11 @@ void TR::X86RegRegRegInstruction::assignRegisters(TR_RegisterKinds kindsToBeAssi
          {
          getTargetRegister()->block();
          getSourceRegister()->block();
-         getSourceRightRegister()->block();
+         getSource2ndRegister()->block();
          getDependencyConditions()->assignPreConditionRegisters(this, kindsToBeAssigned, cg());
          getTargetRegister()->unblock();
          getSourceRegister()->unblock();
-         getSourceRightRegister()->unblock();
+         getSource2ndRegister()->unblock();
          }
       }
    }
@@ -1510,9 +1506,9 @@ void insertUnresolvedReferenceInstructionMemoryBarrier(TR::CodeGenerator *cg, in
       else if ((barrier & kLoadFence) && cg->getX86ProcessorInfo().requiresLFENCE())
          fenceOp.setOpCodeValue(LFENCE);
       else if (barrier & kStoreFence)
-      	 fenceOp.setOpCodeValue(SFENCE);
+         fenceOp.setOpCodeValue(SFENCE);
       else
-      	 TR_ASSERT(false, "No valid memory barrier has been found. \n");
+         TR_ASSERT(false, "No valid memory barrier has been found. \n");
 
       TR::Instruction *padInst = NULL;
       TR::Instruction *fenceInst = NULL;
@@ -1559,8 +1555,8 @@ void insertUnresolvedReferenceInstructionMemoryBarrier(TR::CodeGenerator *cg, in
             deps->addPostCondition(srcReg, TR::RealRegister::NoReg, cg);
 
       if (addressReg)
-      	 if (addressReg->getKind()!=TR_X87)
-      	 	  deps->addPostCondition(addressReg, TR::RealRegister::NoReg, cg);
+         if (addressReg->getKind()!=TR_X87)
+            deps->addPostCondition(addressReg, TR::RealRegister::NoReg, cg);
 
       if (anotherMr)
          {
@@ -1568,7 +1564,7 @@ void insertUnresolvedReferenceInstructionMemoryBarrier(TR::CodeGenerator *cg, in
          baseReg = anotherMr->getBaseRegister();
          indexReg = anotherMr->getIndexRegister();
          if (TR::Compiler->target.is64Bit())
-        	   addressReg = anotherMr->getAddressRegister();
+            addressReg = anotherMr->getAddressRegister();
 
          if (baseReg && baseReg->getKind() != TR_X87)
             deps->addPostCondition(baseReg, TR::RealRegister::NoReg, cg);
@@ -2164,205 +2160,6 @@ TR::X86MemRegImmInstruction::X86MemRegImmInstruction(TR::Instruction        *pre
    {
    }
 
-////////////////////////////////////////////////////////////////////////////////
-// TR::X86MemRegRegInstruction:: member functions
-////////////////////////////////////////////////////////////////////////////////
-
-TR::X86MemRegRegInstruction::X86MemRegRegInstruction(TR_X86OpCodes          op,
-                                                         TR::Node                *node,
-                                                         TR::MemoryReference  *mr,
-                                                         TR::Register            *slreg,
-                                                         TR::Register            *srreg,
-                                                         TR::CodeGenerator *cg)
-   : TR::X86MemRegInstruction(slreg, mr, node, op, cg), _sourceRightRegister(srreg)
-   {
-   useRegister(srreg);
-   }
-
-TR::X86MemRegRegInstruction::X86MemRegRegInstruction(TR::Instruction         *precedingInstruction,
-                                                         TR_X86OpCodes          op,
-                                                         TR::MemoryReference  *mr,
-                                                         TR::Register            *slreg,
-                                                         TR::Register            *srreg,
-                                                         TR::CodeGenerator *cg)
-   : TR::X86MemRegInstruction(slreg, mr, op, precedingInstruction, cg), _sourceRightRegister(srreg)
-   {
-   useRegister(srreg);
-   }
-
-TR::X86MemRegRegInstruction::X86MemRegRegInstruction(TR_X86OpCodes                       op,
-                                                         TR::Node                             *node,
-                                                         TR::MemoryReference               *mr,
-                                                         TR::Register                         *slreg,
-                                                         TR::Register                         *srreg,
-                                                         TR::RegisterDependencyConditions  *cond,
-                                                         TR::CodeGenerator *cg)
-   : TR::X86MemRegInstruction(cond, slreg, mr, node, op, cg), _sourceRightRegister(srreg)
-   {
-   useRegister(srreg);
-   }
-
-TR::X86MemRegRegInstruction::X86MemRegRegInstruction(TR::Instruction                      *precedingInstruction,
-                                                         TR_X86OpCodes                       op,
-                                                         TR::MemoryReference               *mr,
-                                                         TR::Register                         *slreg,
-                                                         TR::Register                         *srreg,
-                                                         TR::RegisterDependencyConditions  *cond,
-                                                         TR::CodeGenerator *cg)
-   : TR::X86MemRegInstruction(cond, slreg, mr, op, precedingInstruction, cg), _sourceRightRegister(srreg)
-   {
-   useRegister(srreg);
-   }
-
-
-bool TR::X86MemRegRegInstruction::refsRegister(TR::Register *reg)
-   {
-   if (getMemoryReference()->refsRegister(reg) ||
-       reg == getSourceRegister()              ||
-       reg == getSourceRightRegister())
-      {
-      return true;
-      }
-   else if (getDependencyConditions())
-      {
-      return getDependencyConditions()->refsRegister(reg);
-      }
-
-   return false;
-   }
-
-//check refsRegister
-bool TR::X86MemRegRegInstruction::usesRegister(TR::Register *reg)
-   {
-   if (getMemoryReference()->refsRegister(reg) ||
-       reg == getSourceRegister()              ||
-       reg == getSourceRightRegister())
-      {
-      return true;
-      }
-   else if (getDependencyConditions())
-      {
-      return getDependencyConditions()->usesRegister(reg);
-      }
-
-   return false;
-   }
-
-void TR::X86MemRegRegInstruction::assignRegisters(TR_RegisterKinds kindsToBeAssigned)
-   {
-   aboutToAssignRegDeps();
-   aboutToAssignSourceRegister();
-   aboutToAssignSourceRightRegister();
-   aboutToAssignMemRef(getMemoryReference());
-
-   if ((cg()->getAssignmentDirection() == cg()->Backward))
-      {
-      if (getDependencyConditions())
-         {
-         getMemoryReference()->blockRegisters();
-         getSourceRegister()->block();
-         getSourceRightRegister()->block();
-         getDependencyConditions()->assignPostConditionRegisters(this, kindsToBeAssigned, cg());
-         getMemoryReference()->unblockRegisters();
-         getSourceRegister()->unblock();
-         getSourceRightRegister()->unblock();
-         }
-
-      TR::RealRegister  *assignedSourceRegister      = NULL;
-      TR::RealRegister  *assignedSourceRightRegister = NULL;
-      TR_RegisterSizes  requestedRegSize            = TR_WordReg;
-
-      if (kindsToBeAssigned & getSourceRegister()->getKindAsMask())
-         {
-#ifdef J9_PROJECT_SPECIFIC
-         TR::UnresolvedDataSnippet *snippet = getMemoryReference()->getUnresolvedDataSnippet();
-         if (snippet && (kindsToBeAssigned & (TR_FPR_Mask | TR_VRF_Mask)))
-            snippet->setHasLiveXMMRegisters((cg()->machine()->fpGetNumberOfLiveXMMRs() > 0) ? true : false);
-#endif
-
-         if (getOpCode().hasByteSource())
-            {
-            requestedRegSize = TR_ByteReg;
-            }
-
-         assignedSourceRegister  = getSourceRegister()->getAssignedRealRegister();
-         _sourceRightRegister->block();
-         getMemoryReference()->blockRegisters();
-
-         if (assignedSourceRegister == NULL)
-            {
-            assignedSourceRegister = assignGPRegister(this, getSourceRegister(), requestedRegSize, cg());
-            }
-         else if (requestedRegSize == TR_ByteReg)
-            {
-            assignedSourceRegister = assign8BitGPRegister(this, getSourceRegister(), cg());
-            }
-
-         _sourceRightRegister->unblock();
-         getSourceRegister()->block();
-
-         assignedSourceRightRegister = _sourceRightRegister->getAssignedRealRegister();
-         if (assignedSourceRightRegister == NULL)
-            {
-            assignedSourceRightRegister = assignGPRegister(this, _sourceRightRegister, TR_WordReg, cg());
-            }
-
-         getSourceRegister()->unblock();
-         getMemoryReference()->unblockRegisters();
-
-         if (assignedSourceRegister != NULL)
-            {
-            assignedSourceRegister->block();
-            assignedSourceRightRegister->block();
-            getMemoryReference()->assignRegisters(this, cg());
-            assignedSourceRegister->unblock();
-            assignedSourceRightRegister->unblock();
-
-            if (getSourceRegister()->decFutureUseCount() == 0 &&
-                assignedSourceRegister->getState() != TR::RealRegister::Locked)
-               {
-               cg()->traceRegFreed(getSourceRegister(), assignedSourceRegister);
-               getSourceRegister()->setAssignedRegister(NULL);
-               assignedSourceRegister->setState(TR::RealRegister::Unlatched);
-               }
-
-            if (_sourceRightRegister->decFutureUseCount() == 0 &&
-                assignedSourceRightRegister->getState() != TR::RealRegister::Locked)
-               {
-               cg()->traceRegFreed(_sourceRightRegister, assignedSourceRightRegister);
-               _sourceRightRegister->setAssignedRegister(NULL);
-               assignedSourceRightRegister->setState(TR::RealRegister::Unlatched);
-               }
-            setSourceRegister(assignedSourceRegister);
-            _sourceRightRegister = assignedSourceRightRegister;
-            }
-         else
-            {
-            getMemoryReference()->assignRegisters(this, cg());
-            }
-         }
-
-      if (getDependencyConditions())
-         {
-         getMemoryReference()->blockRegisters();
-         getSourceRegister()->block();
-         getSourceRightRegister()->block();
-         getDependencyConditions()->assignPreConditionRegisters(this, kindsToBeAssigned, cg());
-         getMemoryReference()->unblockRegisters();
-         getSourceRegister()->unblock();
-         getSourceRightRegister()->unblock();
-         }
-      }
-   else
-      {
-#ifdef J9_PROJECT_SPECIFIC
-      TR_ASSERT(kindsToBeAssigned & TR_X87_Mask, "not assigning FPRs in forward RA pass");
-      TR::UnresolvedDataSnippet *snippet = getMemoryReference()->getUnresolvedDataSnippet();
-      if (snippet)
-         snippet->setNumLiveX87Registers(cg()->machine()->fpGetNumberOfLiveFPRs());
-#endif
-      }
-   }
 
 ////////////////////////////////////////////////////////////////////////////////
 // TR::X86RegMemInstruction:: member functions
@@ -2637,6 +2434,169 @@ TR::X86RegMemImmInstruction::X86RegMemImmInstruction(TR::Instruction        *pre
                                                        TR::CodeGenerator      *cg)
    : TR::X86RegMemInstruction(mr, treg, op, precedingInstruction, cg), _sourceImmediate(imm)
    {
+   }
+
+////////////////////////////////////////////////////////////////////////////////
+// TR::X86RegRegMemInstruction:: member functions
+////////////////////////////////////////////////////////////////////////////////
+
+TR::X86RegRegMemInstruction::X86RegRegMemInstruction(TR_X86OpCodes        op,
+                                                     TR::Node            *node,
+                                                     TR::Register        *slreg,
+                                                     TR::Register        *srreg,
+                                                     TR::MemoryReference *mr,
+                                                     TR::CodeGenerator   *cg)
+   : TR::X86RegMemInstruction(op, node, slreg, mr, cg), _source2ndRegister(srreg)
+   {
+   useRegister(srreg);
+   }
+
+TR::X86RegRegMemInstruction::X86RegRegMemInstruction(TR_X86OpCodes                      op,
+                                                     TR::Node                          *node,
+                                                     TR::Register                      *slreg,
+                                                     TR::Register                      *srreg,
+                                                     TR::MemoryReference               *mr,
+                                                     TR::RegisterDependencyConditions  *cond,
+                                                     TR::CodeGenerator                 *cg)
+   : TR::X86RegMemInstruction(op, node, slreg, mr, cond, cg), _source2ndRegister(srreg)
+   {
+   useRegister(srreg);
+   }
+
+bool TR::X86RegRegMemInstruction::refsRegister(TR::Register *reg)
+   {
+   if (getMemoryReference()->refsRegister(reg) ||
+       reg == getTargetRegister()              ||
+       reg == getSource2ndRegister())
+      {
+      return true;
+      }
+   else if (getDependencyConditions())
+      {
+      return getDependencyConditions()->refsRegister(reg);
+      }
+
+   return false;
+   }
+
+//check refsRegister
+bool TR::X86RegRegMemInstruction::usesRegister(TR::Register *reg)
+   {
+   if (getMemoryReference()->refsRegister(reg) ||
+       reg == getTargetRegister()              ||
+       reg == getSource2ndRegister())
+      {
+      return true;
+      }
+   else if (getDependencyConditions())
+      {
+      return getDependencyConditions()->usesRegister(reg);
+      }
+
+   return false;
+   }
+
+void TR::X86RegRegMemInstruction::assignRegisters(TR_RegisterKinds kindsToBeAssigned)
+   {
+   aboutToAssignRegDeps();
+   aboutToAssignTargetRegister();
+   aboutToAssignSource2ndRegister();
+   aboutToAssignMemRef(getMemoryReference());
+
+   if ((cg()->getAssignmentDirection() == cg()->Backward))
+      {
+      if (getDependencyConditions())
+         {
+         getMemoryReference()->blockRegisters();
+         getTargetRegister()->block();
+         getSource2ndRegister()->block();
+         getDependencyConditions()->assignPostConditionRegisters(this, kindsToBeAssigned, cg());
+         getMemoryReference()->unblockRegisters();
+         getTargetRegister()->unblock();
+         getSource2ndRegister()->unblock();
+         }
+
+      TR::RealRegister *assignedTargetRegister    = NULL;
+      TR::RealRegister *assignedSource2ndRegister = NULL;
+      TR_RegisterSizes  requestedRegSize          = getOpCode().hasByteTarget() ? TR_ByteReg :
+                                                    getOpCode().hasXMMTarget()  ? TR_QuadWordReg : TR_WordReg;
+
+      if (kindsToBeAssigned & getTargetRegister()->getKindAsMask())
+         {
+#ifdef J9_PROJECT_SPECIFIC
+         TR::UnresolvedDataSnippet *snippet = getMemoryReference()->getUnresolvedDataSnippet();
+         if (snippet && (kindsToBeAssigned & (TR_FPR_Mask | TR_VRF_Mask)))
+            snippet->setHasLiveXMMRegisters((cg()->machine()->fpGetNumberOfLiveXMMRs() > 0) ? true : false);
+#endif
+
+         assignedTargetRegister = getTargetRegister()->getAssignedRealRegister();
+         getSource2ndRegister()->block();
+         getMemoryReference()->blockRegisters();
+
+         if (assignedTargetRegister == NULL)
+            {
+            assignedTargetRegister = assignGPRegister(this, getTargetRegister(), requestedRegSize, cg());
+            }
+         else if (requestedRegSize == TR_ByteReg)
+            {
+            assignedTargetRegister = assign8BitGPRegister(this, getTargetRegister(), cg());
+            }
+
+         getSource2ndRegister()->unblock();
+         getTargetRegister()->block();
+
+         assignedSource2ndRegister = getSource2ndRegister()->getAssignedRealRegister();
+         if (assignedSource2ndRegister == NULL)
+            {
+            assignedSource2ndRegister = assignGPRegister(this, getSource2ndRegister(), requestedRegSize, cg());
+            }
+
+         getTargetRegister()->unblock();
+         getMemoryReference()->unblockRegisters();
+
+         if (assignedTargetRegister != NULL)
+            {
+            assignedTargetRegister->block();
+            assignedSource2ndRegister->block();
+            getMemoryReference()->assignRegisters(this, cg());
+            assignedTargetRegister->unblock();
+            assignedSource2ndRegister->unblock();
+
+            if (getTargetRegister()->decFutureUseCount() == 0 &&
+                assignedTargetRegister->getState() != TR::RealRegister::Locked)
+               {
+               cg()->traceRegFreed(getTargetRegister(), assignedTargetRegister);
+               getTargetRegister()->setAssignedRegister(NULL);
+               assignedTargetRegister->setState(TR::RealRegister::Unlatched);
+               }
+
+            if (getSource2ndRegister()->decFutureUseCount() == 0 &&
+                assignedSource2ndRegister->getState() != TR::RealRegister::Locked)
+               {
+               cg()->traceRegFreed(getSource2ndRegister(), assignedSource2ndRegister);
+               getSource2ndRegister()->setAssignedRegister(NULL);
+               assignedSource2ndRegister->setState(TR::RealRegister::Unlatched);
+               }
+            setTargetRegister(assignedTargetRegister);
+            setSource2ndRegister(assignedSource2ndRegister);
+            }
+         else
+            {
+            getMemoryReference()->assignRegisters(this, cg());
+            }
+         }
+
+      if (getDependencyConditions())
+         {
+         getMemoryReference()->blockRegisters();
+         getTargetRegister()->block();
+         getSource2ndRegister()->block();
+         getDependencyConditions()->assignPreConditionRegisters(this, kindsToBeAssigned, cg());
+         getMemoryReference()->unblockRegisters();
+         getTargetRegister()->unblock();
+         getSource2ndRegister()->unblock();
+         }
+      }
    }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4003,7 +3963,9 @@ void
 TR::AMD64RegImm64SymInstruction::autoSetReloKind()
    {
    TR::Symbol *symbol = getSymbolReference()->getSymbol();
-   if (symbol->isConst())
+   if (symbol->isDebugCounter())
+      setReloKind(TR_DebugCounter);
+   else if (symbol->isConst())
       setReloKind(TR_ConstantPool);
    else if (symbol->isStatic() && !getSymbolReference()->isUnresolved() && !symbol->isClassObject() && !symbol->isNotDataAddress())
       setReloKind(TR_DataAddress);
@@ -4199,7 +4161,6 @@ TR::X86LabelInstruction  *
 generateLabelInstruction(TR_X86OpCodes   op,
                          TR::Node        * node,
                          TR::LabelSymbol * sym,
-                         bool             needsVMThreadRegister,
                          TR::CodeGenerator *cg)
    {
    return new (cg->trHeapMemory()) TR::X86LabelInstruction(op, node, sym, cg);
@@ -4209,7 +4170,6 @@ TR::X86LabelInstruction  *
 generateLabelInstruction(TR::Instruction * pred,
                          TR_X86OpCodes   op,
                          TR::LabelSymbol * sym,
-                         bool             needsVMThreadRegister,
                          TR::CodeGenerator *cg)
    {
    return new (cg->trHeapMemory()) TR::X86LabelInstruction(pred, op, sym, cg);;
@@ -4272,7 +4232,6 @@ generateLabelInstruction(TR_X86OpCodes     opCode,
                          TR::LabelSymbol     *label,
                          TR::Node           *glRegDep,
                          List<TR::Register> *popRegisters,
-                         bool               needsVMThreadRegister,
                          bool               evaluateGlRegDeps,
                          TR::CodeGenerator *cg)
    {
@@ -4314,13 +4273,11 @@ generateJumpInstruction(
                                       destinationLabel,
                                       jumpNode->getFirstChild(),
                                       0,
-                                      needsVMThreadRegister,
                                       evaluateGlRegDeps,
                                       cg) :
              inst = generateLabelInstruction(opCode,
                                       jumpNode,
                                       destinationLabel,
-                                      needsVMThreadRegister,
                                       cg);
 
    return inst;
@@ -4341,7 +4298,7 @@ generateConditionalJumpInstruction(
       {
       List<TR::Register> popRegisters(cg->trMemory());
       TR::Node* glRegDep = ifNode->getChild(2);
-      inst = generateLabelInstruction(opCode, ifNode, destinationLabel, glRegDep, &popRegisters, false, cg);
+      inst = generateLabelInstruction(opCode, ifNode, destinationLabel, glRegDep, &popRegisters, cg);
 
       if (inst->getDependencyConditions())
          {
@@ -4480,6 +4437,42 @@ generateRegRegInstruction(TR::Instruction *instr,
                           TR::Register    *sreg, TR::CodeGenerator *cg)
    {
    return new (cg->trHeapMemory()) TR::X86RegRegInstruction(instr, op, treg, sreg, cg);
+   }
+
+TR::X86RegRegRegInstruction  *
+generateRegRegRegInstruction(TR_X86OpCodes op, TR::Node * node, TR::Register * reg1, TR::Register * reg2, TR::Register * reg3, TR::CodeGenerator *cg)
+   {
+   return new (cg->trHeapMemory()) TR::X86RegRegRegInstruction(op, node, reg1, reg2, reg3, cg);
+   }
+
+TR::X86RegRegRegInstruction  *
+generateRegRegRegInstruction(TR_X86OpCodes                     op,
+                             TR::Node                         *node,
+                             TR::Register                     *reg1,
+                             TR::Register                     *reg2,
+                             TR::Register                     *reg3,
+                             TR::RegisterDependencyConditions *cond,
+                             TR::CodeGenerator                *cg)
+   {
+   return new (cg->trHeapMemory()) TR::X86RegRegRegInstruction(op, node, reg1, reg2, reg3, cond, cg);
+   }
+
+TR::X86RegRegMemInstruction  *
+generateRegRegMemInstruction(TR_X86OpCodes op, TR::Node * node, TR::Register * reg1, TR::Register * reg2, TR::MemoryReference  * mr, TR::CodeGenerator *cg)
+   {
+   return new (cg->trHeapMemory()) TR::X86RegRegMemInstruction(op, node, reg1, reg2, mr, cg);
+   }
+
+TR::X86RegRegMemInstruction  *
+generateRegRegMemInstruction(TR_X86OpCodes                     op,
+                             TR::Node                         *node,
+                             TR::Register                     *reg1,
+                             TR::Register                     *reg2,
+                             TR::MemoryReference              *mr,
+                             TR::RegisterDependencyConditions *cond,
+                             TR::CodeGenerator                *cg)
+   {
+   return new (cg->trHeapMemory()) TR::X86RegRegMemInstruction(op, node, reg1, reg2, mr, cond, cg);
    }
 
 TR::X86MemImmInstruction  *
@@ -4865,17 +4858,6 @@ generateImm64SymInstruction(TR_X86OpCodes       op,
                             TR::CodeGenerator   *cg)
    {
    return new (cg->trHeapMemory()) TR::AMD64Imm64SymInstruction(op, node, imm, sr, cg);
-   }
-
-TR::AMD64Imm64SymInstruction *
-generateImm64SymInstruction(TR_X86OpCodes       op,
-                            TR::Node            *node,
-                            uint64_t            imm,
-                            TR::SymbolReference *sr,
-                            TR::CodeGenerator   *cg,
-                            uint8_t            *thunk)
-   {
-   return new (cg->trHeapMemory()) TR::AMD64Imm64SymInstruction(op, node, imm, sr, cg, thunk);
    }
 
 TR::AMD64Imm64SymInstruction *

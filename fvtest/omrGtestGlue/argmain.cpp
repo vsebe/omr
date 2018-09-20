@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015, 2015 IBM Corp. and others
+ * Copyright (c) 2015, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -28,24 +28,24 @@
  * correctly when it is located in a library.
  */
 
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 #include <windows.h>
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 #include <stdlib.h>
 #include <string.h>
 
 #if defined(J9ZOS390)
 #include "atoe.h"
-#endif
+#endif /* defined(J9ZOS390) */
 
 /* Define a macro for the name of the main function that takes char args */
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 #define CHARMAIN translated_main
 #else
 #define CHARMAIN main
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 
-extern "C" int testMain(int argc, char **argv, char **envp);
+extern "C" int omr_main_entry(int argc, char **argv, char **envp);
 
 int
 CHARMAIN(int argc, char **argv, char **envp)
@@ -61,10 +61,10 @@ CHARMAIN(int argc, char **argv, char **envp)
 	}
 #endif /* defined(J9ZOS390) */
 
-	return testMain(argc, argv, envp);
+	return omr_main_entry(argc, argv, envp);
 }
 
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 int
 wmain(int argc, wchar_t **argv, wchar_t **envp)
 {
@@ -127,4 +127,4 @@ wmain(int argc, wchar_t **argv, wchar_t **envp)
 
 	return rc;
 }
-#endif /* defined(WIN32) */
+#endif /* defined(OMR_OS_WINDOWS) */

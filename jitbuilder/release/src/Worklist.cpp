@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2016 IBM Corp. and others
+ * Copyright (c) 2016, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -24,7 +24,6 @@
 #include <iostream>
 #include <stdlib.h>
 #include <stdint.h>
-#include <dlfcn.h>
 #include <errno.h>
 
 #include "Jit.hpp"
@@ -203,7 +202,7 @@ WorklistMethod::buildIL()
    for (int32_t i=0;i < 20;i++)
       builders[i] = OrphanBytecodeBuilder(i, (char *)bcName[i]);
 
-   OMR::VirtualMachineState *vmState = new OMR::VirtualMachineState();
+   TR::VirtualMachineState *vmState = new TR::VirtualMachineState();
    setVMState(vmState);
 
    Store("result",

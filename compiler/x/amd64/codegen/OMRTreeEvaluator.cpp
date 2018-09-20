@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -374,10 +374,8 @@ TR::Register *OMR::X86::AMD64::TreeEvaluator::dbits2lEvaluator(TR::Node *node, T
          TR::RegisterDependencyConditions  *deps = generateRegisterDependencyConditions((uint8_t)0, (uint8_t)1, cg);
          deps->addPostCondition(treg, TR::RealRegister::NoReg, cg);
 
-         TR::IA32ConstantDataSnippet *nan1Snippet = cg->findOrCreate8ByteConstant(node, DOUBLE_NAN_1_LOW);
-         TR::IA32ConstantDataSnippet *nan2Snippet = cg->findOrCreate8ByteConstant(node, DOUBLE_NAN_2_LOW);
-         TR::MemoryReference      *nan1MR      = generateX86MemoryReference(nan1Snippet, cg);
-         TR::MemoryReference      *nan2MR      = generateX86MemoryReference(nan2Snippet, cg);
+         TR::MemoryReference* nan1MR     = generateX86MemoryReference(cg->findOrCreate8ByteConstant(node, DOUBLE_NAN_1_LOW), cg);
+         TR::MemoryReference* nan2MR     = generateX86MemoryReference(cg->findOrCreate8ByteConstant(node, DOUBLE_NAN_2_LOW), cg);
 
          TR::LabelSymbol *startLabel     = TR::LabelSymbol::create(cg->trHeapMemory(),cg);
          TR::LabelSymbol *normalizeLabel = TR::LabelSymbol::create(cg->trHeapMemory(),cg);
@@ -407,8 +405,7 @@ TR::Register *OMR::X86::AMD64::TreeEvaluator::dbits2lEvaluator(TR::Node *node, T
          helperDeps->addPreCondition( treg, TR::RealRegister::eax, cg);
          helperDeps->addPostCondition(treg, TR::RealRegister::eax, cg);
 
-         TR::IA32ConstantDataSnippet *nanDetectorSnippet  = cg->findOrCreate8ByteConstant(node, nanDetector);
-         TR::MemoryReference      *nanDetectorMR       = generateX86MemoryReference(nanDetectorSnippet,  cg);
+         TR::MemoryReference* nanDetectorMR = generateX86MemoryReference(cg->findOrCreate8ByteConstant(node, nanDetector),  cg);
 
          TR::LabelSymbol *startLabel     = TR::LabelSymbol::create(cg->trHeapMemory(),cg);
          TR::LabelSymbol *slowPathLabel  = TR::LabelSymbol::create(cg->trHeapMemory(),cg);
@@ -427,13 +424,11 @@ TR::Register *OMR::X86::AMD64::TreeEvaluator::dbits2lEvaluator(TR::Node *node, T
 
          // Slow path
          //
-         TR_OutlinedInstructions *slowPath = new (cg->trHeapMemory()) TR_OutlinedInstructions(slowPathLabel, cg);
-         cg->getOutlinedInstructionsList().push_front(slowPath);
-         slowPath->swapInstructionListsWithCompilation();
-         generateLabelInstruction(NULL, LABEL,       slowPathLabel,          cg)->setNode(node);
+         {
+         TR_OutlinedInstructionsGenerator og(slowPathLabel, node, cg);
          generateRegImm64Instruction(MOV8RegImm64, node, treg, DOUBLE_NAN, cg);
-         generateLabelInstruction(      JMP4,        node, endLabel,         cg);
-         slowPath->swapInstructionListsWithCompilation();
+         generateLabelInstruction(JMP4, node, endLabel, cg);
+         }
 
          // Merge point
          //

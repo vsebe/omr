@@ -36,6 +36,7 @@ ALL_TESTS = \
             conststring \
             dotproduct \
             fieldaddress \
+            inliningrecfib \
             issupportedtype \
             iterfib \
             linkedlist \
@@ -77,6 +78,7 @@ all_goal: common_goal
 	./conststring
 	./dotproduct
 	./fieldaddress
+	./inliningrecfib
 	./linkedlist
 	./localarray
 	./operandarraytests
@@ -170,6 +172,13 @@ fieldaddress : libjitbuilder.a FieldAddress.o
 	$(CXX) -g -fno-rtti -o $@ FieldAddress.o $(JITBUILDER_LINK_FLAGS)
 
 FieldAddress.o: src/FieldAddress.cpp src/FieldAddress.hpp
+	$(CXX) -o $@ $(CXXFLAGS) $<
+
+
+inliningrecfib : libjitbuilder.a InliningRecFib.o
+	$(CXX) -g -fno-rtti -o $@ InliningRecFib.o $(JITBUILDER_LINK_FLAGS)
+
+InliningRecFib.o: src/InliningRecFib.cpp src/InliningRecFib.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $<
 
 
@@ -317,7 +326,7 @@ UseIncrement.o : src/UseIncrement.c
 	$(CC) -g -o $@ -c $<
 
 increment.o : simple
-	TR_Options='enableObjectFileGeneration,objectFile=increment.o' ./simple
+	TR_Options='enableRelocatableELFGeneration,objectFile=increment.o' ./simple
 
 
 useCall : test_calls.o UseCall.o
@@ -327,7 +336,7 @@ UseCall.o : src/UseCall.c
 	$(CC) -g -o $@ -c $<
 
 test_calls.o : call
-	TR_Options='enableObjectFileGeneration,objectFile=test_calls.o' ./call
+	TR_Options='enableRelocatableELFGeneration,objectFile=test_calls.o' ./call
 
 
 clean:

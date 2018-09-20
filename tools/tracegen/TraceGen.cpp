@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2014, 2016 IBM Corp. and others
+ * Copyright (c) 2014, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -24,13 +24,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if !defined(WIN32)
+#if !defined(OMR_OS_WINDOWS)
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/types.h>
 #include <unistd.h>
-#endif /* !defined(WIN32) */
+#endif /* !defined(OMR_OS_WINDOWS) */
 
 #include "ArgParser.hpp"
 #include "CFileWriter.hpp"
@@ -178,7 +178,10 @@ TraceGen::generate(J9TDFOptions *options, const char *currentTDFFile)
 		goto done;
 	}
 
-	printf("Processing tdf file %s\n", currentTDFFile);
+	if (true == options->verboseOutput) {
+		printf("Processing tdf file %s\n", currentTDFFile);
+	}
+
 
 	rc = reader.init(currentTDFFile);
 	if (RC_OK != rc) {
@@ -200,7 +203,7 @@ TraceGen::generate(J9TDFOptions *options, const char *currentTDFFile)
 		goto done;
 	}
 
-	groups = calculateGroups(tdf, &groupCount);
+	groups = calculateGroups(options, tdf, &groupCount);
 	if (NULL == groups) {
 		FileUtils::printError("Failed to calculate tracepoint groups");
 		rc = RC_FAILED;
@@ -387,7 +390,7 @@ failed:
 }
 
 J9TDFGroup *
-TraceGen::calculateGroups(J9TDFFile *tdf, unsigned int *groupCount)
+TraceGen::calculateGroups(J9TDFOptions *options, J9TDFFile *tdf, unsigned int *groupCount)
 {
 	const char *EVENT_TYPES[] = {
 		"Event",
@@ -415,7 +418,9 @@ TraceGen::calculateGroups(J9TDFFile *tdf, unsigned int *groupCount)
 	}
 
 
-	printf("Calculating groups for %s\n", tdf->header.executable);
+	if (true == options->verboseOutput) {
+		printf("Calculating groups for %s\n", tdf->header.executable);
+	}
 
 	/* Add tracepoint ID to tracegroup */
 	while (NULL != tp) {

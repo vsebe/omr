@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -25,13 +25,13 @@
 //  NOTE: IF you add opcodes or change the order then you must fix the following
 //        files (at least): ./ILOpCodeProperties.hpp
 //                          compiler/ras/Tree.cpp (2 tables)
-//                          trj9/codegen/CodeGenGPU.cpp
 //                          compiler/optimizer/SimplifierTable.hpp
 //                          compiler/optimizer/ValuePropagationTable.hpp
 //                          compiler/x/amd64/codegen/TreeEvaluatorTable.cpp
 //                          compiler/x/i386/codegen/TreeEvaluatorTable.cpp
 //                          compiler/p/codegen/TreeEvaluatorTable.cpp
 //                          compiler/z/codegen/TreeEvaluatorTable.cpp
+//                          compiler/aarch64/codegen/TreeEvaluatorTable.cpp
 //                          compiler/arm/codegen/TreeEvaluatorTable.cpp
 //                          compiler/il/OMRILOpCodesEnum.hpp
 //                          compiler/il/ILOpCodes.hpp
@@ -39,7 +39,7 @@
 
 
    FirstOMROp,
-   BadILOp = 0,  // illegal op hopefully help with uninitialised nodes
+   BadILOp = 0,  // illegal op hopefully help with uninitialized nodes
    aconst,   // load address constant (zero value means NULL)
    iconst,   // load integer constant (32-bit signed 2's complement)
    lconst,   // load long integer constant (64-bit signed 2's complement)
@@ -54,6 +54,18 @@
    bload,    // load byte
    sload,    // load short integer
    lload,    // load long integer
+
+   //Read barrier is used to represent loads with side effects like check for GC, debugging etc.
+   //It is the same as the corresponding load except that it needs to be anchored under a
+   //treetop. The children and symbol of a read barrier are the same as the corresponding load.
+   irdbar,   // read barrier for load integer
+   frdbar,   // read barrier for load float
+   drdbar,   // read barrier for load double
+   ardbar,   // read barrier for load address
+   brdbar,   // read barrier for load byte
+   srdbar,   // load short integer
+   lrdbar,   // load long integer
+
    iloadi,   // load indirect integer
    floadi,   // load indirect float
    dloadi,   // load indirect double
@@ -61,6 +73,13 @@
    bloadi,   // load indirect byte
    sloadi,   // load indirect short integer
    lloadi,   // load indirect long integer
+   irdbari,  // read barrier for load indirect integer
+   frdbari,  // read barrier for load indirect float
+   drdbari,  // read barrier for load indirect double
+   ardbari,  // read barrier for load indirect address
+   brdbari,  // read barrier for load indirect byte
+   srdbari,  // read barrier for load indirect short integer
+   lrdbari,  // read barrier for load indirect long integer
    istore,   // store integer
    lstore,   // store long integer
    fstore,   // store float
@@ -654,7 +673,7 @@
    Case,     // case nodes that are children of TR_switch.  Uses the branchdestination and the int const field
    table,    // tableswitch (child1 is the selector, child2 the default destination, subsequent children are the branch targets
              // (the last child may be a branch table address, use getCaseIndexUpperBound() when iterating over branch targets)
-   exceptionRangeFence,    // (J9) SymbolReference is the aliasing effect, initialiser is where the code address gets put when binary is generated
+   exceptionRangeFence,    // (J9) SymbolReference is the aliasing effect, initializer is where the code address gets put when binary is generated
                            // used for delimiting function, try blocks, catch clauses, finally clauses, etc.
    dbgFence, // used to delimit code (stmts) for debug info.  Has no symbol reference.
    NULLCHK,  // Null check a pointer.  child 1 is indirect reference. Symbolref indicates failure action/destination

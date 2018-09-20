@@ -1,21 +1,21 @@
-// Copyright (c) 1998, 2016 IBM Corp. and others
-// 
+// Copyright (c) 1998, 2018 IBM Corp. and others
+//
 // This program and the accompanying materials are made available under
 // the terms of the Eclipse Public License 2.0 which accompanies this
 // distribution and is available at https://www.eclipse.org/legal/epl-2.0/
 // or the Apache License, Version 2.0 which accompanies this distribution and
 // is available at https://www.apache.org/licenses/LICENSE-2.0.
-// 
+//
 // This Source Code may also be made available under the following
 // Secondary Licenses when the conditions for such availability set
 // forth in the Eclipse Public License, v. 2.0 are satisfied: GNU
-// General Public License, version 2 with the GNU Classpath 
+// General Public License, version 2 with the GNU Classpath
 // Exception [1] and GNU General Public License, version 2 with the
 // OpenJDK Assembly Exception [2].
-// 
+//
 // [1] https://www.gnu.org/software/classpath/license.html
 // [2] http://openjdk.java.net/legal/assembly-exception.html
-// 
+//
 // SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
 
 Executable=omrport
@@ -537,10 +537,10 @@ TraceEntry=Trc_PRT_mem_omrmem_advise_and_free_memory_Entry Group=mem Overhead=1 
 TraceExit=Trc_PRT_mem_omrmem_advise_and_free_memory_Exit Group=mem Overhead=1 Level=10 NoEnv Template="omrmem_advise_and_free_memory"
 
 TraceException=Trc_PRT_mem_advise_and_free_memory_basic_disclaim64_failed Group=mem Overhead=1 Level=1 NoEnv Template="omrmem_advise_and_free_memory_basic : disclaim64(%p,%zu, DISCLAIM_ZEROMEM) failed, with errno %d"
-TraceException=Trc_PRT_mem_advise_and_free_memory_basic_vmgetinfo_failed Group=mem Overhead=1 Level=1 NoEnv Template="omrmem_advise_and_free_memory_basic : vmgetinfo failed, errno=%d" 
+TraceException=Trc_PRT_mem_advise_and_free_memory_basic_vmgetinfo_failed Group=mem Overhead=1 Level=1 NoEnv Template="omrmem_advise_and_free_memory_basic : vmgetinfo failed, errno=%d"
 
 TraceException=Trc_PRT_mem_advise_and_free_memory_basic_j9discard_data_failed Group=mem Overhead=1 Level=1 NoEnv Template="omrmem_advise_and_free_memory_basic : j9discard_data(%p,%zu) failed"
-TraceException=Trc_PRT_mem_advise_and_free_memory_basic_Pgser_Release_failed Group=mem Overhead=1 Level=1 NoEnv Template="omrmem_advise_and_free_memory_basic : Pgser_Release(%p,%zu) failed" 
+TraceException=Trc_PRT_mem_advise_and_free_memory_basic_Pgser_Release_failed Group=mem Overhead=1 Level=1 NoEnv Template="omrmem_advise_and_free_memory_basic : Pgser_Release(%p,%zu) failed"
 TraceEvent=Trc_PRT_mem_advise_and_free_memory_basic_params Group=mem Overhead=1 Level=5 NoEnv Template="omrmem_advise_and_free_memory_basic : pagesize=%zu memoryPointer=%p memorySize=%zu"
 TraceEvent=Trc_PRT_mem_advise_and_free_memory_basic_oscall Group=mem Overhead=1 Level=10 NoEnv Template="omrmem_advise_and_free_memory_basic : memPtrPageRounded=%p memPtrSizePageRounded=%zu"
 
@@ -597,7 +597,7 @@ TraceEvent=Trc_PRT_mmap_dont_need_oscall Group=mmap Overhead=1 Level=10 NoEnv Te
 TraceException=Trc_PRT_mmap_dont_need_madvise_failed Group=mmap Overhead=1 Level=1 NoEnv Template="omrmmap_dont_need : madvise(%p,%zu, MADV_DONTNEED) failed, with errno %d"
 TraceException=Trc_PRT_mmap_dont_need_disclaim64_failed Group=mmap Overhead=1 Level=1 NoEnv Template="omrmmap_dont_need : disclaim64(%p,%zu, DISCLAIM_ZEROMEM) failed, with errno %d"
 TraceException=Trc_PRT_mmap_dont_need_j9discard_data_failed Group=mmap Overhead=1 Level=1 NoEnv Template="omrmmap_dont_need : j9discard_data(%p,%zu) failed"
-TraceException=Trc_PRT_mmap_dont_need_Pgser_Release_failed Group=mmap Overhead=1 Level=1 NoEnv Template="omrmmap_dont_need : Pgser_Release(%p,%zu) failed" 
+TraceException=Trc_PRT_mmap_dont_need_Pgser_Release_failed Group=mmap Overhead=1 Level=1 NoEnv Template="omrmmap_dont_need : Pgser_Release(%p,%zu) failed"
 TraceException=Trc_PRT_mmap_dont_need_virtual_unlock_failed Group=mmap Overhead=1 Level=1 NoEnv Template="omrmmap_dont_need : VirtualUnlock(%p,%zu) failed, with errno %d"
 
 // signal trace points
@@ -623,7 +623,7 @@ TraceExit=Trc_PRT_signal_omrsig_set_async_signal_handler_exiting Group=signal Ov
 TraceEvent=Trc_PRT_signal_omrsig_shutdown_empty_routine Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_shutdown: ERROR, empty shutdown routine indicates omrsig_startup failed, portLibrary=%p"
 TraceEvent=Trc_PRT_signal_omrsig_set_options Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_options: options=0x%X"
 TraceEvent=Trc_PRT_signal_omrsig_set_options_too_late_handlers_installed Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_options too late, handlers already installed: options=0x%X"
-TraceEvent=Trc_PRT_signal_mapPortLibSignalToUnix_ERROR_unknown_signal Group=signal Overhead=1 Level=1 NoEnv Template="omrsignal: mapPortLibSignalToUnix: ERROR, unknown signal, portLibSignal=0x%X"
+TraceEvent=Trc_PRT_signal_mapPortLibSignalToUnix_ERROR_unknown_signal Obsolete Group=signal Overhead=1 Level=1 NoEnv Template="omrsignal: mapPortLibSignalToUnix: ERROR, unknown signal, portLibSignal=0x%X"
 
 TraceEvent=Trc_PRT_signal_omrsig_asynchSignalReporterThread_going_to_sleep Group=signal Overhead=1 Level=1 NoEnv Template="asynchSignalReporter: going to sleep"
 TraceEvent=Trc_PRT_signal_omrsig_asynchSignalReporter_woken_up Group=signal Overhead=1 Level=1 NoEnv Template="asynchSignalReporter: woken up"
@@ -781,7 +781,7 @@ TraceEvent=Trc_PRT_vmem_default_reserve_using_4K_pages_below_bar Group=mem Overh
 TraceEvent=Trc_PRT_vmem_default_reserve_using_4K_pages_above_bar Group=mem Overhead=1 Level=5 NoEnv Template="default_pageSize_reserve_memory using __moservices() above bar, byteAmount=%u MB"
 
 TraceException=Trc_PRT_vmem_default_reserve_using_4K_pages_above_bar_invalid_argument  Group=mem Overhead=1 Level=1 NoEnv Template="default_pageSize_reserve_memory passed invalid arguments to __moservices, return code = %d, errno2 = %d"
-TraceException=Trc_PRT_vmem_default_reserve_using_4K_pages_above_bar_iarv64_failed  Group=mem Overhead=1 Level=1 NoEnv Template="default_pageSize_reserve_memory iarv64 failed with return code=%d, reason code=%d" 
+TraceException=Trc_PRT_vmem_default_reserve_using_4K_pages_above_bar_iarv64_failed  Group=mem Overhead=1 Level=1 NoEnv Template="default_pageSize_reserve_memory iarv64 failed with return code=%d, reason code=%d"
 
 TraceException=Trc_PRT_vmem_omrvmem_decommit_memory_failure Group=mem Overhead=1 Level=1 NoEnv Template="omrvmem_decommit_memory failed with platform specific error code=%d at address=%p byteAmount=%u"
 
@@ -863,8 +863,8 @@ TraceException=Trc_PRT_sysinfo_get_number_CPUs_by_type_invalidType Group=sysinfo
 TraceEvent=Trc_PRT_sysinfo_get_number_CPUs_by_type_platformNotSupported Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_get_number_CPUs_by_type: Platform not supported."
 TraceEntry=Trc_PRT_sysinfo_get_number_CPUs_by_type_Entered Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_get_number_CPUs_by_type: Function entered."
 TraceExit=Trc_PRT_sysinfo_get_number_CPUs_by_type_Exit Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_get_number_CPUs_by_type: Exiting function - Type %d returned %d."
-TraceEntry=Trc_PRT_sysinfo_set_number_entitled_CPUs_Entered Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_set_number_entitled_CPUs: Function entered."
-TraceExit=Trc_PRT_sysinfo_set_number_entitled_CPUs_Exit Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_set_number_entitled_CPUs: Exiting function. Entitled CPUs set to %d."
+TraceEntry=Trc_PRT_sysinfo_set_number_user_specified_CPUs_Entered Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_set_number_user_specified_CPUs: Function entered."
+TraceExit=Trc_PRT_sysinfo_set_number_user_specified_CPUs_Exit Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_set_number_user_specified_CPUs: Exiting function. User-specified CPUs set to %d."
 TraceException=Trc_PRT_sysinfo_get_number_CPUs_by_type_failedOnline Group=sysinfo Overhead=1 Level=1 NoEnv Template="omrsysinfo_get_number_CPUs_by_type: Error: Could not get online CPUs - %s%d"
 
 TraceEntry=Trc_PRT_sysinfo_get_limit_Entered Group=sysinfo Overhead=1 Level=5 NoEnv Template="omrsysinfo_get_limit: resourceID = %d"
@@ -1001,7 +1001,7 @@ TraceEntry=Trc_PRT_vmem_reserve_using_moservices_entry Group=mem Overhead=1 Leve
 TraceException=Trc_PRT_vmem_reserve_memory_using_moservices_invalid_page_size Group=mem Overhead=1 Level=3 NoEnv Template="omrvmem_reserve_memory invalid page pageSize=%zu"
 TraceException=Trc_PRT_vmem_reserve_memory_using_moservices_invalid_page_flags Group=mem Overhead=1 Level=3 NoEnv Template="omrvmem_reserve_memory invalid page pageSize=%zu pageFlags=0x%x"
 TraceException=Trc_PRT_vmem_reserve_using_moservices_invalid_argument  Group=mem Overhead=1 Level=1 NoEnv Template="reserve_memory_with_moservices passed invalid arguments to __moservices, return code = %d, errno2 = %d"
-TraceException=Trc_PRT_vmem_reserve_using_moservices_failed  Group=mem Overhead=1 Level=1 NoEnv Template="reserve_memory_with_moservices iarv64 failed with return code=%d, reason code=%d" 
+TraceException=Trc_PRT_vmem_reserve_using_moservices_failed  Group=mem Overhead=1 Level=1 NoEnv Template="reserve_memory_with_moservices iarv64 failed with return code=%d, reason code=%d"
 TraceExit=Trc_PRT_vmem_reserve_using_moservices_exit Group=mem Overhead=1 Level=5 NoEnv Template="reserve_memory_with_moservices returns %p byteAmount=%u"
 
 TraceException=Trc_PRT_vmem_omrvmem_decommit_nonpageable_memory Group=mem Overhead=1 Level=1 NoEnv Template="omrvmem_decommit_memory attemp to decommit non-pageable memory at address=%p byteAmount=%u"
@@ -1050,5 +1050,36 @@ TraceExit=Trc_PRT_sysinfo_cgroup_enable_subsystems_Exit Group=sysinfo Overhead=1
 TraceEntry=Trc_PRT_sysinfo_cgroup_get_memlimit_Entry Group=sysinfo Overhead=1 Level=3 NoEnv Template="omrsysinfo_cgroup_get_memlimit entered"
 TraceException=Trc_PRT_sysinfo_cgroup_get_memlimit_memory_limit_read_failed Group=sysinfo Overhead=1 Level=1 NoEnv Template="omrsysinfo_cgroup_get_memlimit: failed to read memory limit from %s with portable error code=%d"
 TraceEvent=Trc_PRT_sysinfo_cgroup_get_memlimit_unlimited Group=sysinfo Overhead=1 Level=2 NoEnv Template="omrsysinfo_cgroup_get_memlimit: no memory limit is defined by the cgroup of memory subsystem, using physical memory as the limit"
-TraceEvent=Trc_PRT_sysinfo_cgroup_get_memlimit Group=sysinfo Overhead=1 Level=1 NoEnv Template="omrsysinfo_cgroup_get_memlimit: memory limit is 0x%llx bytes" 
+TraceEvent=Trc_PRT_sysinfo_cgroup_get_memlimit Group=sysinfo Overhead=1 Level=1 NoEnv Template="omrsysinfo_cgroup_get_memlimit: memory limit is 0x%llx bytes"
 TraceExit=Trc_PRT_sysinfo_cgroup_get_memlimit_Exit Group=sysinfo Overhead=1 Level=3 NoEnv Template="omrsysinfo_cgroup_get_memlimit exiting with rc=%d"
+
+TraceEvent=Trc_PRT_signal_registerSignalHandlerWithOS_registeredHandler1 Group=signal Overhead=1 Level=1 NoEnv Template="registerSignalHandlerWithOS, registered signal handler with OS, portLibrarySignalNo=0x%X, unixSignalNo=0x%X, handler=%p, oldOSHandler=%p"
+
+TraceEntry=Trc_PRT_signal_omrsig_set_single_async_signal_handler_entered Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: Entered, handler=%p, handler_arg=%p, portlibSignalFlag=0x%X"
+TraceExit-Exception=Trc_PRT_signal_omrsig_set_single_async_signal_handler_error_multiple_signal_flags_found Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: Exiting, error: more than one signal bit set in portlibSignalFlag=0x%X"
+TraceEvent=Trc_PRT_signal_omrsig_set_single_async_signal_handler_will_not_set_handler_due_to_Xrs Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: will not set handler due to Xrs, handler=%p, handler_arg=%p, portlibSignalFlag=0x%X"
+TraceExit-Exception=Trc_PRT_signal_omrsig_set_single_async_signal_handler_exiting_did_nothing_possible_error Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: Exiting, possible error, rc=%d, handler=%p, handler_arg=%p, portlibSignalFlag=0x%X"
+TraceEvent=Trc_PRT_signal_omrsig_set_single_async_signal_handler_user_handler_removed Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: user handler removed, handler=%p, handler_arg=%p, portlibSignalFlag=0x%X"
+TraceEvent=Trc_PRT_signal_omrsig_set_single_async_signal_handler_user_handler_added_1 Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: user handler added_1, handler=%p, handler_arg=%p, portlibSignalFlag=0x%X"
+TraceEvent=Trc_PRT_signal_omrsig_set_single_async_signal_handler_user_handler_added_2 Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: user handler added_2, handler=%p, handler_arg=%p, portlibSignalFlag=0x%X"
+TraceExit=Trc_PRT_signal_omrsig_set_single_async_signal_handler_exiting Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_set_single_async_signal_handler: Exiting, rc=%d, handler=%p, handler_arg=%p, portlibSignalFlag=0x%X, oldOSHandler=%p"
+
+TraceException=Trc_PRT_signal_mapOSSignalToPortLib_ERROR_unknown_signal Group=signal Overhead=1 Level=1 NoEnv Template="omrsignal: ERROR unknown OS signal=0x%X"
+
+TraceEntry=Trc_PRT_signal_omrsig_register_os_handler_entered Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_register_os_handler: Entered, portLibrarySignalFlag=0x%X, newOSHandler=%p"
+TraceExit=Trc_PRT_signal_omrsig_register_os_handler_exiting Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_register_os_handler: Exiting, rc=%d, portLibrarySignalFlag=0x%X, newOSHandler=%p, oldOSHandler=%p"
+TraceException=Trc_PRT_signal_omrsig_register_os_handler_invalid_portlibSignalFlag Group=signal Overhead=1 Level=1 NoEnv Template="omrsig_register_os_handler: ERROR, portlibSignalFlag=0x%X is either zero or has multiple signal bits set."
+
+TraceEntry=Trc_PRT_signal_omrsig_is_master_signal_handler_entered Group=signal Overhead=1 Level=3 NoEnv Template="omrsig_is_master_signal_handler: Entered, osHandler=%p"
+TraceExit=Trc_PRT_signal_omrsig_is_master_signal_handler_exiting Group=signal Overhead=1 Level=3 NoEnv Template="omrsig_is_master_signal_handler: Exiting, rc=%d"
+
+TraceException=Trc_PRT_readCgroupFile_fgets_failed Group=sysinfo Overhead=1 Level=3 NoEnv Template="readCgroupFile: fgets failed for %s with errno=%d"
+TraceException=Trc_PRT_isRunningInContainer_fgets_failed Group=sysinfo Overhead=1 Level=3 NoEnv Template="isRunningInContainer: unexpected format of file %s with errno=%d"
+
+TraceException=Trc_PRT_signal_mapPortLibSignalToOSSignal_ERROR_unknown_signal Group=signal Overhead=1 Level=3 NoEnv Template="omrsignal: mapPortLibSignalToOSSignal: ERROR, unknown signal, portLibSignal=0x%X" 
+
+TraceException=Trc_PRT_retrieveLinuxCgroupMemoryStats_invalidValue Group=sysinfo Overhead=1 Level=1 NoEnv Template="retrieveLinuxCgroupMemoryStats: Value of field \"%s\" in file %s is invalid"
+TraceEvent=Trc_PRT_retrieveLinuxMemoryStats_CgroupMemoryStatsFailed Group=sysinfo Overhead=1 Level=1 NoEnv Template="retrieveLinuxMemoryStats: Failed to retrieve memory stats of cgroup with error code=%d"
+
+TraceEntry=Trc_PRT_signal_omrsig_is_signal_ignored_entered Group=signal Overhead=1 Level=3 NoEnv Template="omrsig_is_signal_ignored: Entered, portLibrarySignalFlag=0x%X"
+TraceExit=Trc_PRT_signal_omrsig_is_signal_ignored_exiting Group=signal Overhead=1 Level=3 NoEnv Template="omrsig_is_signal_ignored: Exiting, rc=%d, isSignalIgnored=%d"

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -43,19 +43,11 @@
 #include "OMRVMThreadListIterator.hpp"
 #include "ObjectModel.hpp"
 #include "ScavengerCopyScanRatio.hpp"
-#if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
-#include "ScavengerHotFieldStats.hpp"
-#endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
 #include "ScavengerStats.hpp"
 #include "SublistPool.hpp"
 
-#if defined(OMR_VALGRIND_MEMCHECK)
-#include <set>
-#endif /* defined(OMR_VALGRIND_MEMCHECK) */
-
 class MM_CardTable;
 class MM_ClassLoaderRememberedSet;
-class MM_Collector;
 class MM_CollectorLanguageInterface;
 class MM_CompactGroupPersistentStats;
 class MM_CompressedCardTable;
@@ -64,6 +56,7 @@ class MM_Dispatcher;
 class MM_EnvironmentBase;
 class MM_FrequentObjectsStats;
 class MM_GlobalAllocationManager;
+class MM_GlobalCollector;
 class MM_Heap;
 class MM_HeapMap;
 class MM_HeapRegionManager;
@@ -77,6 +70,7 @@ class MM_ReferenceChainWalkerMarkMap;
 class MM_RememberedSetCardBucket;
 #if defined(OMR_GC_STACCATO)
 class MM_RememberedSetWorkPackets;
+class MM_RememberedSetSATB;
 #endif /* OMR_GC_STACCATO */
 #if defined(OMR_GC_MODRON_SCAVENGER)
 class MM_Scavenger;
@@ -169,6 +163,7 @@ public:
 	bool _forceOptionConcurrentMark; /**< true if Concurrent Mark option is forced in command line */
 	bool _forceOptionConcurrentSweep; /**< true if Concurrent Sweep option is forced in command line */
 	bool _forceOptionLargeObjectArea; /**< true if Large Object Area option is forced in command line */
+	bool _forceOptionWriteBarrierSATB; /**< Set with -Xgc:snapshotAtTheBeginningBarrier */
 
 	MM_ConfigurationOptions()
 		: MM_BaseNonVirtual()
@@ -177,6 +172,7 @@ public:
 		, _forceOptionConcurrentMark(false)
 		, _forceOptionConcurrentSweep(false)
 		, _forceOptionLargeObjectArea(false)
+		, _forceOptionWriteBarrierSATB(false)
 	{
 		_typeId = __FUNCTION__;
 	}
@@ -203,7 +199,7 @@ private:
 protected:
 	OMR_VM* _omrVM;
 	OMR::GC::Forge _forge;
-	MM_Collector* _globalCollector; /**< The global collector for the system */
+	MM_GlobalCollector* _globalCollector; /**< The global collector for the system */
 #if defined(OMR_GC_OBJECT_MAP)
 	MM_ObjectMap *_objectMap;
 #endif /* defined(OMR_GC_OBJECT_MAP) */
@@ -257,7 +253,9 @@ public:
 	MM_SublistPool rememberedSet;
 #endif /* OMR_GC_MODRON_SCAVENGER */
 #if defined(OMR_GC_STACCATO)
+	// TODO: SATB remove staccatoRememberedSet after initial SATB changes are merged
 	MM_RememberedSetWorkPackets* staccatoRememberedSet; /**< The Staccato remembered set used for the write barrier */
+	MM_RememberedSetSATB* sATBBarrierRememberedSet; /**< The snapshot at the beginning barrier remembered set used for the write barrier */
 #endif /* OMR_GC_STACCATO */
 	ModronLnrlOptions lnrlOptions;
 
@@ -408,8 +406,6 @@ public:
 		OMR_GC_SCAVENGER_SCANORDERING_HIERARCHICAL,
 	};
 	ScavengerScanOrdering scavengerScanOrdering; /**< scan ordering in Scavenger */
-	bool scavengerTraceHotFields; /**< whether tracing hot fields in Scavenger is enabled */
-	MM_ScavengerHotFieldStats *scavengerHotFieldStats; /**< hot field stats accumulated over all GC threads */
 #if defined(OMR_GC_MODRON_SCAVENGER)
 	uintptr_t scvTenureRatioHigh;
 	uintptr_t scvTenureRatioLow;
@@ -540,11 +536,11 @@ public:
 	uintptr_t allowMergedSpaces;
 	uintptr_t maxSizeDefaultMemorySpace;
 	bool allocationIncrementSetByUser;
-
-	uintptr_t heapTailPadding; /** < Minimum amount of readable space past the end of the heap. See Jazz 31620. */
 	/* End command line options temporary home */
 
 	uintptr_t overflowSafeAllocSize;
+
+	uint64_t usablePhysicalMemory; /**< Physical memory available to the process */
 
 #if defined(OMR_GC_REALTIME)
 	/* Parameters */
@@ -668,7 +664,9 @@ public:
 	uintptr_t tarokGMPIntermission; /** The delay between GMP cycles, specified as the number of GMP increments to skip */
 	bool tarokAutomaticGMPIntermission; /** Should the delay between GMP cycles be automatic, or as specified in tarokGMPIntermission? */
 	uintptr_t tarokRegionMaxAge; /**< Maximum age a region can be before it will no longer have its age incremented after a PGC (saturating age) */
-	uintptr_t tarokKickoffHeadroomRegionCount; /**< Count of extra regions reserved for survivor set, in case of sudden changes of survivor rate. Used in calculation to predict GMP kickoff */
+	uintptr_t tarokKickoffHeadroomInBytes; /**< extra bytes reserved for survivor set, in case of sudden changes of survivor rate. Used in calculation to predict GMP kickoff */
+	bool 	  tarokForceKickoffHeadroomInBytes; /** true if user specifies tarokKickoffHeadroomInBytes via -XXgc:tarokKickoffHeadroomInBytes= */
+	uint32_t tarokKickoffHeadroomRegionRate; /**< used by calculating tarokKickoffHeadroomInBytes, the percentage of the free memory, range: 0(0%)<=the rate<=50(50%) , default=2 (2%)  */
 	MM_RememberedSetCardBucket* rememberedSetCardBucketPool; /* GC thread local pools of RS Card Buckets for each Region (its Card List) */
 	bool tarokEnableDynamicCollectionSetSelection; /**< Enable dynamic selection of regions to include in the collection set that reside outside of the nursery */
 	uintptr_t tarokDynamicCollectionSetSelectionAbsoluteBudget; /**< Number of budgeted regions to dynamically select for PGC collection (outside of the required nursery set) */
@@ -718,8 +716,8 @@ public:
 	bool alwaysCallReadBarrier; /**< was -Xgc:alwaysCallReadBarrier specified? */
 	
 	bool _holdRandomThreadBeforeHandlingWorkUnit; /**< Whether we should randomly hold up a thread entering MM_ParallelTask::handleNextWorkUnit() */
-	uintptr_t _holdRandomThreadBeforeHandlingWorkUnitPeriod; /** < How often (in terms of number of times MM_ParallelTask::handleNextWorkUnit() is called) to randomly hold up a thread entering MM_ParallelTask::handleNextWorkUnit() */
-	bool _forceRandomBackoutsAfterScan; /** < Whether we should force MM_Scavenger::completeScan() to randomly fail due to backout */
+	uintptr_t _holdRandomThreadBeforeHandlingWorkUnitPeriod; /**< How often (in terms of number of times MM_ParallelTask::handleNextWorkUnit() is called) to randomly hold up a thread entering MM_ParallelTask::handleNextWorkUnit() */
+	bool _forceRandomBackoutsAfterScan; /**< Whether we should force MM_Scavenger::completeScan() to randomly fail due to backout */
 	uintptr_t _forceRandomBackoutsAfterScanPeriod; /**< How often (in terms of number of times MM_Scavenger::completeScan() is called) to randomly have MM_Scavenger::completeScan() fail due to backout */
 
 	MM_ReferenceChainWalkerMarkMap* referenceChainWalkerMarkMap; /**< Reference to Reference Chain Walker mark map - will be created at first call and destroyed in Configuration tearDown*/
@@ -729,16 +727,16 @@ public:
 	uintptr_t darkMatterSampleRate;/**< the weight of darkMatterSample for standard gc, default:32, if the weight = 0, disable darkMatterSampling */
 
 #if defined(OMR_GC_IDLE_HEAP_MANAGER)
-	uintptr_t idleMinimumFree;   /** < percentage of free heap to be retained as committed, default=0 for gencon, complete tenture free memory will be decommitted */
-	uintptr_t lastGCFreeBytes;  /** < records the free memory size from last Global GC cycle */
-	uintptr_t gcOnIdleRatio; /**< the percentage of allocation since the last GC allocation determines the invocation of global GC, default global GC is invoked if allocation is > 20% */
+	uintptr_t idleMinimumFree;   /**< percentage of free heap to be retained as committed, default=0 for gencon, complete tenture free memory will be decommitted */
+	uintptr_t lastGCFreeBytes;  /**< records the free memory size from last Global GC cycle */
 	bool gcOnIdle; /**< Enables releasing free heap pages if true while systemGarbageCollect invoked with IDLE GC code, default is false */
 	bool compactOnIdle; /**< Forces compaction if global GC executed while VM Runtime State set to IDLE, default is false */
 #endif
 
 #if defined(OMR_VALGRIND_MEMCHECK)
-	uintptr_t valgrindMempoolAddr; /** <Memory pool's address for valgrind> **/
-	std::set<uintptr_t> _allocatedObjects;
+	uintptr_t valgrindMempoolAddr; /**< Memory pool's address for valgrind **/
+	J9HashTable *memcheckHashTable; /**< Hash table to store object addresses for valgrind> **/
+	MUTEX memcheckHashTableMutex;
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */
 
 	/* Function Members */
@@ -797,8 +795,8 @@ public:
 		}
 	}
 
-	MMINLINE MM_Collector* getGlobalCollector() { return _globalCollector; }
-	MMINLINE void setGlobalCollector(MM_Collector* collector) { _globalCollector = collector; }
+	MMINLINE MM_GlobalCollector* getGlobalCollector() { return _globalCollector; }
+	MMINLINE void setGlobalCollector(MM_GlobalCollector* collector) { _globalCollector = collector; }
 
 #if defined(OMR_GC_OBJECT_MAP)
 	MMINLINE MM_ObjectMap *getObjectMap() { return _objectMap; }
@@ -1238,6 +1236,7 @@ public:
 		, gcmetadataPageFlags(OMRPORT_VMEM_PAGE_FLAG_NOT_USED)
 #if defined(OMR_GC_STACCATO)
 		, staccatoRememberedSet(NULL)
+		, sATBBarrierRememberedSet(NULL)
 #endif /* OMR_GC_STACCATO */
 
 		, heapBaseForBarrierRange0(NULL)
@@ -1342,8 +1341,6 @@ public:
 		, gcThreadCountForced(false)
 #if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
 		, scavengerScanOrdering(OMR_GC_SCAVENGER_SCANORDERING_HIERARCHICAL)
-		, scavengerTraceHotFields(false)
-		, scavengerHotFieldStats(NULL)
 #endif /* OMR_GC_MODRON_SCAVENGER || OMR_GC_VLHGC */
 #if defined(OMR_GC_MODRON_SCAVENGER)
 		, scvTenureRatioHigh(J9_SCV_TENURE_RATIO_HIGH)
@@ -1457,11 +1454,6 @@ public:
 		, allowMergedSpaces(1)
 		, maxSizeDefaultMemorySpace(0)
 		, allocationIncrementSetByUser(0)
-#if defined(J9_GC_OBJECT_HEAP_TAIL_PADDING)
-		, heapTailPadding(J9_GC_OBJECT_HEAP_TAIL_PADDING)  /* Minimum amount of readable space past the end of the heap. See Jazz 31620. */
-#else /* J9_GC_OBJECT_HEAP_TAIL_PADDING */
-		, heapTailPadding(0)
-#endif /* J9_GC_OBJECT_HEAP_TAIL_PADDING */
 		, overflowSafeAllocSize(0)
 #if defined(OMR_GC_REALTIME)
 		, RTC_Frequency(2048) // must be power of 2 - translates to ~488us delay
@@ -1558,7 +1550,9 @@ public:
 		, tarokGMPIntermission(UDATA_MAX)
 		, tarokAutomaticGMPIntermission(true)
 		, tarokRegionMaxAge(0)
-		, tarokKickoffHeadroomRegionCount(0)
+		, tarokKickoffHeadroomInBytes(0)
+		, tarokForceKickoffHeadroomInBytes(false)
+		, tarokKickoffHeadroomRegionRate(2)
 		, rememberedSetCardBucketPool(NULL)
 		, tarokEnableDynamicCollectionSetSelection(true)
 		, tarokDynamicCollectionSetSelectionAbsoluteBudget(0)
@@ -1610,7 +1604,6 @@ public:
 #if defined(OMR_GC_IDLE_HEAP_MANAGER)
 		, idleMinimumFree(0)
 		, lastGCFreeBytes(0)
-		, gcOnIdleRatio(20)
 		, gcOnIdle(false)
 		, compactOnIdle(false)
 #endif

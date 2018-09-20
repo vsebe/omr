@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -965,7 +965,7 @@ TR_RegisterCandidate::processLiveOnEntryBlocks(TR::Block * * blocks, int32_t *bl
          TR_ScratchList<TR_Structure> unreferencedLoops(comp->trMemory());
          TR_ScratchList<TR_Structure> referencedLoops(comp->trMemory());
          if ((numUnreferencedBlocksAtThisFrequency > 0) &&
-             (comp->getOptions()->getOption(TR_EnableRangeSplittingGRA) ||  // move this check above ?
+             (comp->getOption(TR_EnableRangeSplittingGRA) ||  // move this check above ?
               (comp->cg()->areAssignableGPRsScarce())))
             {
             bool seenBlockAtThisFrequency = false;
@@ -1538,10 +1538,6 @@ TR_RegisterCandidate::processLiveOnEntryBlocks(TR::Block * * blocks, int32_t *bl
          }
       }
 
-   setDontAssignVMThreadRegister(false);
-   if ((loadsAndStores - reduction) <= 0)
-      setDontAssignVMThreadRegister(true);
-
    if ((numberOfBlocks == 0) && (loadsAndStores > 0))
       numberOfBlocks = 1;
 
@@ -1794,7 +1790,6 @@ TR_RegisterCandidates::prioritizeCandidate(
    TR_RegisterCandidate * newRC, TR_RegisterCandidate * & first)
    {
    LexicalTimer t("prioritizeCandidate", comp()->phaseTimer());
-   bool isARCandidate = false;
 
    if (newRC->getWeight() != 0)
       {
@@ -2003,64 +1998,61 @@ scanPressureSimulatorCacheForConflicts(TR_RegisterCandidate *rc, TR_BitVector &b
 
    int32_t i;
    for (i = firstRegister; i <= lastRegister; ++i)
-   {
-     if ((i == comp->cg()->getVMThreadGlobalRegisterNumber()) && rc->isDontAssignVMThreadRegister())
-       continue;
+      {
+      if(trace)
+         {
+         traceMsg(comp,"\t    reg %d: {",i);
+         }
+      TR_BitVectorIterator bvi(liveOnExitConflicts[i]);
+      while (bvi.hasMoreElements())
+         {
+         TR::Block *block = all_blocks[bvi.getNextElement()];
+         for (auto e = block->getSuccessors().begin(); e != block->getSuccessors().end(); ++e)
+            {
+            TR::Block *succ = toBlock((*e)->getTo());
 
-     if(trace)
-       {
-       traceMsg(comp,"\t    reg %d: {",i);
-       }
-     TR_BitVectorIterator bvi(liveOnExitConflicts[i]);
-     while (bvi.hasMoreElements())
-     {
-       TR::Block *block = all_blocks[bvi.getNextElement()];
-       for (auto e = block->getSuccessors().begin(); e != block->getSuccessors().end(); ++e)
-       {
-   TR::Block *succ = toBlock((*e)->getTo());
+            if (trace)
+               {
+               if(!liveOnEntryConflicts[i].isSet(succ->getNumber()))
+                  traceMsg(comp," Entry(%d)<-Exit(%d)",succ->getNumber(), block->getNumber());
+               }
 
-   if (trace)
-   {
-     if(!liveOnEntryConflicts[i].isSet(succ->getNumber()))
-             traceMsg(comp," Entry(%d)<-Exit(%d)",succ->getNumber(), block->getNumber());
-   }
+            liveOnEntryConflicts[i].set(succ->getNumber());
+            }
+         }
+      if(trace)
+         {
+         traceMsg(comp," }\n");
+         }
+      // In WCode, we allow entry-exit conflicts
+      if(trace)
+         {
+         traceMsg(comp,"\t    reg %d: {",i);
+         }
+      bvi.setBitVector(entryExitConflicts[i]);
+      while (bvi.hasMoreElements())
+         {
+         TR::Block *block = all_blocks[bvi.getNextElement()];
+         for (auto e = block->getSuccessors().begin(); e != block->getSuccessors().end(); ++e)
+            {
+            TR::Block *succ = toBlock((*e)->getTo());
 
-   liveOnEntryConflicts[i].set(succ->getNumber());
-       }
-     }
-     if(trace)
-       {
-       traceMsg(comp," }\n");
-       }
-     // In WCode, we allow entry-exit conflicts
-     if(trace)
-       {
-       traceMsg(comp,"\t    reg %d: {",i);
-       }
-     bvi.setBitVector(entryExitConflicts[i]);
-     while (bvi.hasMoreElements())
-     {
-       TR::Block *block = all_blocks[bvi.getNextElement()];
-       for (auto e = block->getSuccessors().begin(); e != block->getSuccessors().end(); ++e)
-       {
-   TR::Block *succ = toBlock((*e)->getTo());
+            if (trace)
+               if(!liveOnEntryConflicts[i].isSet(succ->getNumber()))
+                  traceMsg(comp," Entry(%d)<-EntryExit(%d)",succ->getNumber(), block->getNumber());
 
-   if (trace)
-     if(!liveOnEntryConflicts[i].isSet(succ->getNumber()))
-             traceMsg(comp," Entry(%d)<-EntryExit(%d)",succ->getNumber(), block->getNumber());
-
-   liveOnEntryConflicts[i].set(succ->getNumber());
-       }
-     }
-     if(trace)
-       {
-       traceMsg(comp," }\n");
-       }
-   }
+            liveOnEntryConflicts[i].set(succ->getNumber());
+            }
+         }
+      if(trace)
+         {
+         traceMsg(comp," }\n");
+         }
+      }
 
    if (trace)
-     {
-     traceMsg(comp, "\tDone scanning for conflicts\n");
+      {
+      traceMsg(comp, "\tDone scanning for conflicts\n");
       TR_BitVectorIterator regIterator(*spilledRegs);
       while (regIterator.hasMoreElements())
          {
@@ -2068,16 +2060,14 @@ scanPressureSimulatorCacheForConflicts(TR_RegisterCandidate *rc, TR_BitVector &b
          if (firstRegister <= regNum && regNum <= lastRegister)
             {
             traceMsg(comp, "\tFor candidate #%d, on entry block conflicts with register %d ", rc->getSymbolReference()->getReferenceNumber(), regNum);
-      liveOnEntryConflicts[regNum].print(comp);
-      // comp->getDebug()->print(comp->getOptions()->getLogFile(), &liveOnEntryConflicts[regNum]);
+            liveOnEntryConflicts[regNum].print(comp);
             traceMsg(comp, "\n");
             traceMsg(comp, "\tFor candidate #%d, on exit block conflicts with register %d ", rc->getSymbolReference()->getReferenceNumber(), regNum);
-      liveOnExitConflicts[regNum].print(comp);
-            // comp->getDebug()->print(comp->getOptions()->getLogFile(), &liveOnExitConflicts[regNum]);
+            liveOnExitConflicts[regNum].print(comp);
             traceMsg(comp, "\n");
             }
          }
-     }
+      }
    }
 
 
@@ -2338,7 +2328,6 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
                       );
       bool isVector = rc->getDataType().isVector();
       bool needs2Regs = false;
-      bool isARCandidate = false;
 
       if (rc->rcNeeds2Regs(comp())) needs2Regs = true;
 
@@ -2363,7 +2352,7 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
                {
                ++totalVRFCount[blockNum];
                }
-            else if (!isARCandidate)
+            else
                {
                ++totalGPRCount[blockNum];
                //dumpOptDetails(comp(), "Block %d has %d gprs live\n", blockNum, totalGPRCount[blockNum]);
@@ -2393,7 +2382,7 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
                {
                ++totalVRFCountOnEntry[blockNum];
                }
-            else if (!isARCandidate)
+            else
                {
                ++totalGPRCountOnEntry[blockNum];
                // dumpOptDetails(comp(), "Block %d has %d gprs live\n", blockNum, totalGPRCount[blockNum]);
@@ -2618,14 +2607,8 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
                       );
       bool isVector = dt.isVector();
       int32_t firstRegister, lastRegister;
-      bool isARCandidate = false;
-
-      if (isARCandidate)
-         {
-         firstRegister = cg->getFirstGlobalAR();
-         lastRegister = cg->getLastGlobalAR();
-         }
-      else if (isFloat)
+      
+      if (isFloat)
          {
            if (debug("disableGlobalFPRs")
                || cg->getDisableFpGRA()
@@ -2869,44 +2852,39 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
       TR::CodeGenerator * cg = comp()->cg();
       cg->removeUnavailableRegisters(rc, blocks, availableRegisters);
 
-      /* edTODO : This check should be enabled always, not only when reg pressure is enabled */
-      if (!comp()->getOption(TR_DisableRegisterPressureSimulation) &&
-           comp()->cg()->supportsHighWordFacility() && !comp()->getOption(TR_DisableHighWordRA))
+      if (comp()->cg()->supportsHighWordFacility() && !comp()->getOption(TR_DisableHighWordRA) && !comp()->getOption(TR_DisableRegisterPressureSimulation))
          {
-         // 64bit values clobber highword registers on zGryphon with HPR support
-         // if the HPR is not available, we cannot assign the corresponding GPR to 64bit symbols
          if (!rc->getType().isInt8() && !rc->getType().isInt16() && !rc->getType().isInt32())
             {
             for (int8_t i = firstRegister; i <= lastRegister; ++i)
                {
-               if (!availableRegisters.isSet(i) && cg->isGlobalHPR(i))
+               // Eliminate all GPRs from consideration whose HPRs are not available since the GPR and HPR overlap
+               // and our register candidate is a 64-bit symbol
+               if (cg->isGlobalHPR(i) && !availableRegisters.isSet(i))
                   {
                   TR_GlobalRegisterNumber clobberedGPR = cg->getGlobalGPRFromHPR(i);
+
                   if (trace)
                      {
-                     traceMsg(comp(), "%s is unavailable and RC is 64bit, ", cg->getDebug()->getGlobalRegisterName(i));
-                     traceMsg(comp(), "removing %s from available list\n", cg->getDebug()->getGlobalRegisterName(clobberedGPR));
+                     traceMsg(comp(), "RC is 64bit and %s is unavailable - removing %s from available list\n", cg->getDebug()->getGlobalRegisterName(i), cg->getDebug()->getGlobalRegisterName(clobberedGPR));
                      }
+
                   availableRegisters.reset(clobberedGPR);
                   }
                }
-            }
-         else
-            // For symmetry, the converse is done : if the GPR is used for 64-bit value, we cannot assign an HPR to its highword.
-            {
+
+            // Now the only candidates remaining should be GPR-HPR pairs which are both available
             for (int8_t i = firstRegister; i <= lastRegister; ++i)
                {
-               // HPR grn's are a part of GPR grn's but not vice versa!
-               if (!availableRegisters.isSet(i) && cg->isGlobalGPR(i) && !cg->isGlobalHPR(i))
+               // We should not consider HPRs for 64-bit register candidates
+               if (cg->isGlobalHPR(i) && availableRegisters.isSet(i))
                   {
-                  TR_GlobalRegisterNumber clobberedHPR = cg->getGlobalHPRFromGPR(i);
+                  availableRegisters.reset(i);
+
                   if (trace)
                      {
-                     traceMsg(comp(), "%s is unavailable, ", cg->getDebug()->getGlobalRegisterName(i));
-                     traceMsg(comp(), "removing HPR %s from available list since its use will clobber the corresponding GPR\n",
-                                       cg->getDebug()->getGlobalRegisterName(clobberedHPR));
+                     traceMsg(comp(), "RC is 64bit - removing %s from available list\n", cg->getDebug()->getGlobalRegisterName(i));
                      }
-                  availableRegisters.reset(clobberedHPR);
                   }
                }
             }
@@ -3058,8 +3036,7 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
                  {
                  traceMsg(comp(),"Searching for blocks/structures with max frequency for reg: %d\n",i);
                  }
-              if ((!useRegisterPressureInfo && availableRegisters.get(i)) ||
-                  ((i == comp()->cg()->getVMThreadGlobalRegisterNumber()) && rc->isDontAssignVMThreadRegister()))
+              if (!useRegisterPressureInfo && availableRegisters.get(i))
                  {
                  // Without register pressure information, we have no idea
                  // what to do to make pickRegister pick an availableRegister,
@@ -3364,7 +3341,7 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
             {
             ++totalVRFCount[blockNum];
             }
-         else if (!isARCandidate)
+         else
             {
             ++totalGPRCount[blockNum];
             if (needs2Regs)
@@ -3394,7 +3371,7 @@ TR_RegisterCandidates::assign(TR::Block ** cfgBlocks, int32_t numberOfBlocks, in
             {
             ++totalVRFCountOnEntry[blockNum];
             }
-         else if (!isARCandidate)
+         else
             {
             ++totalGPRCountOnEntry[blockNum];
             if (needs2Regs)
@@ -3815,8 +3792,7 @@ TR_RegisterCandidates::computeAvailableRegisters(TR_RegisterCandidate *rc, int32
       if (liveOnEntryConflicts.isEmpty() && liveOnExitConflicts.isEmpty() &&
           exitEntryConflicts.isEmpty() &&
           entryExitConflicts.isEmpty() &&
-          comp()->cg()->isGlobalRegisterAvailable(i, rc->getDataType()) &&
-          ((i != comp()->cg()->getVMThreadGlobalRegisterNumber()) || !rc->isDontAssignVMThreadRegister()))
+          comp()->cg()->isGlobalRegisterAvailable(i, rc->getDataType()))
          {
          availableRegisters->set(i);
          }

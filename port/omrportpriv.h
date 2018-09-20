@@ -125,7 +125,7 @@ typedef struct OMRPortLibraryGlobalData {
 #endif
 	uintptr_t vmemAdviseOSonFree;					/** For softmx to determine whether OS should be advised of freed vmem */
 	uintptr_t vectorRegsSupportOn;				/* Turn on vector regs support */
-	uintptr_t entitledCPUs;							/** Number of entitled CPUs */
+	uintptr_t userSpecifiedCPUs;						/* Number of user-specified CPUs */
 #if defined(OMR_OPT_CUDA)
 	J9CudaGlobalData cudaGlobals;
 #endif /* OMR_OPT_CUDA */
@@ -504,7 +504,7 @@ omrsysinfo_env_iterator_next(struct OMRPortLibrary *portLibrary, J9SysinfoEnvIte
 extern J9_CFUNC intptr_t
 omrsysinfo_get_CPU_utilization(struct OMRPortLibrary *portLibrary, struct J9SysinfoCPUTime *cpuTime);
 extern J9_CFUNC void
-omrsysinfo_set_number_entitled_CPUs(struct OMRPortLibrary *portLibrary, uintptr_t number);
+omrsysinfo_set_number_user_specified_CPUs(struct OMRPortLibrary *portLibrary, uintptr_t number);
 extern J9_CFUNC intptr_t
 omrsysinfo_get_cwd(struct OMRPortLibrary *portLibrary, char *buf, uintptr_t bufLen);
 extern J9_CFUNC intptr_t
@@ -531,6 +531,14 @@ extern J9_CFUNC uint64_t
 omrsysinfo_cgroup_are_subsystems_enabled(struct OMRPortLibrary *portLibrary, uint64_t subsystemFlags);
 extern J9_CFUNC int32_t 
 omrsysinfo_cgroup_get_memlimit(struct OMRPortLibrary *portLibrary, uint64_t *limit);
+extern J9_CFUNC BOOLEAN
+omrsysinfo_cgroup_is_memlimit_set(struct OMRPortLibrary *portLibrary);
+extern J9_CFUNC intptr_t
+omrsysinfo_cgroup_get_handle_subsystem_file(struct OMRPortLibrary *portLibrary,  uint64_t subsystemFlag, const char *fileName);
+extern J9_CFUNC struct OMRCgroupEntry *
+omrsysinfo_get_cgroup_subsystem_list(struct OMRPortLibrary *portLibrary);
+extern J9_CFUNC int32_t
+omrsysinfo_is_running_in_container(struct OMRPortLibrary *portLibrary, BOOLEAN *inContainer);
 
 /* J9SourceJ9Signal*/
 extern J9_CFUNC int32_t
@@ -547,14 +555,20 @@ extern J9_CFUNC int32_t
 omrsig_set_options(struct OMRPortLibrary *portLibrary, uint32_t options);
 extern J9_CFUNC int32_t
 omrsig_protect(struct OMRPortLibrary *portLibrary,  omrsig_protected_fn fn, void *fn_arg, omrsig_handler_fn handler, void *handler_arg, uint32_t flags, uintptr_t *result);
-extern J9_CFUNC uint32_t
+extern J9_CFUNC int32_t
 omrsig_set_async_signal_handler(struct OMRPortLibrary *portLibrary, omrsig_handler_fn handler, void *handler_arg, uint32_t flags);
-extern J9_CFUNC void *
-omrsig_set_single_async_signal_handler(struct OMRPortLibrary *portLibrary, omrsig_handler_fn handler, void *handler_arg, uint32_t portlibSignalFlag);
+extern J9_CFUNC int32_t
+omrsig_set_single_async_signal_handler(struct OMRPortLibrary *portLibrary, omrsig_handler_fn handler, void *handler_arg, uint32_t portlibSignalFlag, void **oldOSHandler);
 extern J9_CFUNC uint32_t
 omrsig_map_os_signal_to_portlib_signal(struct OMRPortLibrary *portLibrary, uint32_t osSignalValue);
 extern J9_CFUNC int32_t
 omrsig_map_portlib_signal_to_os_signal(struct OMRPortLibrary *portLibrary, uint32_t portlibSignalFlag);
+extern J9_CFUNC int32_t
+omrsig_register_os_handler(struct OMRPortLibrary *portLibrary, uint32_t portlibSignalFlag, void *newOSHandler, void **oldOSHandler);
+extern J9_CFUNC BOOLEAN
+omrsig_is_master_signal_handler(struct OMRPortLibrary *portLibrary, void *osHandler);
+extern J9_CFUNC int32_t
+omrsig_is_signal_ignored(struct OMRPortLibrary *portLibrary, uint32_t portlibSignalFlag, BOOLEAN *isSignalIgnored);
 extern J9_CFUNC uint32_t
 omrsig_info(struct OMRPortLibrary *portLibrary, void *info, uint32_t category, int32_t index, const char **name, void **value);
 extern J9_CFUNC int32_t

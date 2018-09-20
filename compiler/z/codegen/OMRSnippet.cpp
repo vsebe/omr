@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -182,44 +182,13 @@ OMR::Z::Snippet::getPICBinaryLength(TR::CodeGenerator * cg)
 uint8_t *
 OMR::Z::Snippet::generateLoadVMThreadInstruction(TR::CodeGenerator *cg, uint8_t *cursor)
    {
-   if (cg->comp()->getOption(TR_Enable390FreeVMThreadReg))
-      {
-      TR_BackingStore *vmThreadBackingStore = cg->getVMThreadRegister()->getBackingStorage();
-      if (vmThreadBackingStore)
-         {
-         intptrj_t symbolOffset = vmThreadBackingStore->getSymbolReference()->getSymbol()->getOffset();
-         TR_ASSERT( symbolOffset <= 0xFFF, "displacement too large\n");
-         uint32_t rSP = cg->getStackPointerRealRegister()->getRegisterNumber() - 1;
-         if (TR::Compiler->target.is64Bit())
-            {
-            // LG
-            *(uint32_t *)cursor = 0xE3D00000 + (rSP << 12) + symbolOffset;
-            cursor += sizeof(uint32_t);
-            *(uint16_t *)cursor = 0x0004;
-            cursor += sizeof(uint16_t);
-            }
-         else
-            {
-            *(uint32_t *)cursor = 0x58D00000 + (rSP << 12) + symbolOffset; //L
-            cursor += sizeof(uint32_t);
-            }
-         }
-      }
    return cursor;
    }
 
 uint32_t
 OMR::Z::Snippet::getLoadVMThreadInstructionLength(TR::CodeGenerator *cg)
    {
-   if (!cg->comp()->getOption(TR_Enable390FreeVMThreadReg))
-      {
-      return 0;
-      }
-   if (TR::Compiler->target.is64Bit())
-      {
-      return sizeof(uint32_t) + sizeof(uint16_t);
-      }
-   return sizeof(uint32_t);
+   return 0;
    }
 
 /**
@@ -292,27 +261,19 @@ TR_Debug::printz(TR::FILE *pOutFile, TR::Snippet * snippet)
       case TR::Snippet::IsStackCheckFailure:
          print(pOutFile, (TR::S390StackCheckFailureSnippet *) snippet);
          break;
-#endif
-      case TR::Snippet::IsLabelTable:
-         print(pOutFile, (TR::S390LabelTableSnippet *) snippet);
+      case TR::Snippet::IsInterfaceCallData:
+         print(pOutFile, (TR::J9S390InterfaceCallDataSnippet *) snippet);
          break;
+#endif
       case TR::Snippet::IsConstantData:
       case TR::Snippet::IsWritableData:
       case TR::Snippet::IsEyeCatcherData:
          print(pOutFile, (TR::S390ConstantDataSnippet *) snippet);
          break;
-      case TR::Snippet::IsTargetAddress:
-         print(pOutFile, (TR::S390TargetAddressSnippet *) snippet);
-         break;
-      case TR::Snippet::IsLookupSwitch:
-         print(pOutFile, (TR::S390LookupSwitchSnippet *) snippet);
-         break;
       case TR::Snippet::IsUnresolvedData:
          print(pOutFile, (TR::UnresolvedDataSnippet *) snippet);
          break;
-      case TR::Snippet::IsInterfaceCallData:
-         print(pOutFile, (TR::S390InterfaceCallDataSnippet *) snippet);
-         break;
+
       case TR::Snippet::IsConstantInstruction:
          print(pOutFile, (TR::S390ConstantInstructionSnippet *) snippet);
          break;

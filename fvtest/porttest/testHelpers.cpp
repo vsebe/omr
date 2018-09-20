@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -141,7 +141,6 @@ dumpTestFailuresToConsole(struct OMRPortLibrary *portLibrary)
 		omrmem_free_memory(testFailures[i].errorMessage);
 		omrmem_free_memory(testFailures[i].portErrorMessage);
 	}
-
 }
 
 /**
@@ -154,7 +153,6 @@ dumpTestFailuresToConsole(struct OMRPortLibrary *portLibrary)
 static void
 allocateMemoryForAndCopyInto(struct OMRPortLibrary *portLibrary, char **dest, const char *source)
 {
-
 	uintptr_t strLenPlusTerminator = 0;
 
 	OMRPORT_ACCESS_FROM_OMRPORT(portLibrary);
@@ -167,6 +165,7 @@ allocateMemoryForAndCopyInto(struct OMRPortLibrary *portLibrary, char **dest, co
 		strncpy(*dest, source, strLenPlusTerminator);
 	}
 }
+
 /**
  * Log the test failure so that it can be dumped at test harness exit.
  *
@@ -181,7 +180,6 @@ allocateMemoryForAndCopyInto(struct OMRPortLibrary *portLibrary, char **dest, co
 static void
 logTestFailure(struct OMRPortLibrary *portLibrary, const char *fileName, int32_t lineNumber, const char *testName, int32_t portErrorNumber, const char *portErrorMessage, const char *testErrorMessage)
 {
-
 	if (MAX_NUM_TEST_FAILURES <= numTestFailures) {
 		return;
 	}
@@ -213,10 +211,10 @@ logTestFailure(struct OMRPortLibrary *portLibrary, const char *fileName, int32_t
 void
 outputErrorMessage(struct OMRPortLibrary *portLibrary, const char *fileName, int32_t lineNumber, const char *testName, const char *format, ...)
 {
-
-	char *buf, *portErrorBuf = NULL;
-	uintptr_t sizeBuf;
-	size_t sizePortErrorBuf;
+	char *buf = NULL;
+	char *portErrorBuf = NULL;
+	uintptr_t sizeBuf = 0;
+	size_t sizePortErrorBuf = 0;
 	va_list args;
 	char *lastErrorMessage = NULL;
 	int32_t lastErrorNumber = 0;
@@ -341,7 +339,6 @@ verifyFileExists(struct OMRPortLibrary *portLibrary, const char *pltestFileName,
 	return rc;
 }
 
-
 /**
  * Removes a directory by recursively removing sub-directory and files.
  *
@@ -452,7 +449,7 @@ raiseSEGV(OMRPortLibrary *portLibrary, void *arg)
 	OMRPORT_ACCESS_FROM_OMRPORT(portLibrary);
 	const char *testName = (const char *)arg;
 
-#if defined(WIN32) || defined (J9ZOS390)
+#if defined(OMR_OS_WINDOWS) || defined (J9ZOS390)
 	/*
 	 * - Windows structured exception handling doesn't interact with raise().
 	 * - z/OS doesn't provide a value for the psw1 (PC) register when you use raise()
@@ -462,7 +459,7 @@ raiseSEGV(OMRPortLibrary *portLibrary, void *arg)
 	*ptr = -1;
 #else
 	raise(SIGSEGV);
-#endif
+#endif /* defined(OMR_OS_WINDOWS) || defined (J9ZOS390) */
 
 	outputErrorMessage(PORTTEST_ERROR_ARGS, "unexpectedly continued execution");
 

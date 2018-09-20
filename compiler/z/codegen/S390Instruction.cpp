@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -1385,7 +1385,7 @@ TR::S390ImmInstruction::generateBinaryEncoding()
       //
       void **locationToPatch = (void**)(cursor - (TR::Compiler->target.is64Bit()?4:0));
       cg()->jitAddPicToPatchOnClassRedefinition(*locationToPatch, locationToPatch);
-      cg()->addAOTRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation((uint8_t *)locationToPatch, (uint8_t *)*locationToPatch, TR_HCR, cg()), __FILE__,__LINE__, getNode());
+      cg()->addExternalRelocation(new (cg()->trHeapMemory()) TR::ExternalRelocation((uint8_t *)locationToPatch, (uint8_t *)*locationToPatch, TR_HCR, cg()), __FILE__,__LINE__, getNode());
       }
 
    cursor += getOpCode().getInstructionLength();
@@ -1680,7 +1680,7 @@ TR::S390RRFInstruction::generateBinaryEncoding()
 
    TR::Register *srcReg = getRegisterOperand(2);
    bool isSrcPair = false, isSrc2Pair = false, isTgtPair = false;
-   TR::RegisterPair* srcRegPair = srcReg->getRegisterPair();
+   TR::RegisterPair* srcRegPair = srcReg != NULL ? srcReg->getRegisterPair() : NULL;
    if (srcRegPair != NULL)
      isSrcPair = true;
 
@@ -1695,7 +1695,7 @@ TR::S390RRFInstruction::generateBinaryEncoding()
      isSrc2Pair = true;
 
    TR::Register *tgtReg = getRegisterOperand(1);
-   TR::RegisterPair* tgtRegPair = tgtReg->getRegisterPair();
+   TR::RegisterPair* tgtRegPair = tgtReg != NULL ? tgtReg->getRegisterPair() : NULL;
    if (tgtRegPair != NULL)
      isTgtPair = true;
 
@@ -1737,15 +1737,21 @@ TR::S390RRFInstruction::generateBinaryEncoding()
 
          break;
       case TR::Instruction::IsRRF2:			// M3,  ., R1, R2
-         if ( !isTgtPair )
-            toRealRegister(getRegForBinaryEncoding(tgtReg))->setRegisterField((uint32_t *) cursor, 1);
-         else
-            toRealRegister(tgtRegPair->getHighOrder())->setRegisterField((uint32_t *) cursor, 1);
+         if (tgtReg != NULL)
+            {
+            if ( !isTgtPair )
+               toRealRegister(getRegForBinaryEncoding(tgtReg))->setRegisterField((uint32_t *) cursor, 1);
+            else
+               toRealRegister(tgtRegPair->getHighOrder())->setRegisterField((uint32_t *) cursor, 1);
+            }
 
-         if ( !isSrcPair )
-            toRealRegister(getRegForBinaryEncoding(srcReg))->setRegisterField((uint32_t *) cursor, 0);
-         else
-            toRealRegister(srcRegPair->getHighOrder())->setRegisterField((uint32_t *) cursor, 0);
+         if (srcReg != NULL)
+            {
+            if ( !isSrcPair )
+               toRealRegister(getRegForBinaryEncoding(srcReg))->setRegisterField((uint32_t *) cursor, 0);
+            else
+               toRealRegister(srcRegPair->getHighOrder())->setRegisterField((uint32_t *) cursor, 0);
+            }
 
          setMaskField((uint32_t *) cursor, getMask3(), 3);
          break;
@@ -2723,7 +2729,7 @@ TR::S390RRSInstruction::generateBinaryEncoding()
 /**
  *    RIE Format
  *
- *    RIE1: CRJ, GGRJ, CGFRJ
+ *    RIE1: CRJ, GGRJ
  *     ________ ____ ____ _________________ ___________________
  *    |Op Code | R1 | R2 |       I4        | M3 |////| Op Code |
  *    |________|____|____|_________________|____|____|_________|
@@ -2868,11 +2874,6 @@ TR::S390RIEInstruction::generateBinaryEncoding()
          bool isRIL=false;
          switch (getOpCodeValue())
             {
-            case TR::InstOpCode::CGFRJ  :
-                 cmpOp = TR::InstOpCode::CGFR;
-                 *(uint16_t *) (cursor) = bos(0xB930);
-                 isRRE = true;
-                 break;
             case TR::InstOpCode::CGRJ   :
                  cmpOp = TR::InstOpCode::CGR;
                  *(uint16_t *) (cursor) = bos(0xB920);
@@ -2881,11 +2882,6 @@ TR::S390RIEInstruction::generateBinaryEncoding()
             case TR::InstOpCode::CLGRJ  :
                  cmpOp = TR::InstOpCode::CLGR;
                  *(uint16_t *) (cursor) = bos(0xB921);
-                 isRRE = true;
-                 break;
-            case TR::InstOpCode::CLGFRJ :
-                 cmpOp = TR::InstOpCode::CLGFR;
-                 *(uint16_t *) (cursor) = bos(0xB931);
                  isRRE = true;
                  break;
             case TR::InstOpCode::CLRJ   :
@@ -3067,20 +3063,12 @@ TR::S390RIEInstruction::splitIntoCompareAndLongBranch(void)
    bool isRIL = false;
    switch (getOpCodeValue())
       {
-      case TR::InstOpCode::CGFRJ  :
-       cmpOp = TR::InstOpCode::CGFR;
-       isRRE = true;
-       break;
       case TR::InstOpCode::CGRJ   :
        cmpOp = TR::InstOpCode::CGR;
        isRRE = true;
        break;
       case TR::InstOpCode::CLGRJ  :
        cmpOp = TR::InstOpCode::CLGR;
-       isRRE = true;
-       break;
-      case TR::InstOpCode::CLGFRJ :
-       cmpOp = TR::InstOpCode::CLGFR;
        isRRE = true;
        break;
       case TR::InstOpCode::CLRJ   :
@@ -3162,20 +3150,12 @@ TR::S390RIEInstruction::splitIntoCompareAndBranch(TR::Instruction *insertBranchA
    bool isRIL = false;
    switch (getOpCodeValue())
       {
-      case TR::InstOpCode::CGFRJ  :
-       cmpOp = TR::InstOpCode::CGFR;
-       isRRE = true;
-       break;
       case TR::InstOpCode::CGRJ   :
        cmpOp = TR::InstOpCode::CGR;
        isRRE = true;
        break;
       case TR::InstOpCode::CLGRJ  :
        cmpOp = TR::InstOpCode::CLGR;
-       isRRE = true;
-       break;
-      case TR::InstOpCode::CLGFRJ :
-       cmpOp = TR::InstOpCode::CLGFR;
        isRRE = true;
        break;
       case TR::InstOpCode::CLRJ   :
@@ -3666,7 +3646,7 @@ void appendElementSizeMnemonic(char * opCodeBuffer, int8_t elementSize)
 const char *
 getOpCodeName(TR::InstOpCode * opCode)
    {
-   return TR::InstOpCode::opCodeToNameMap[opCode->getOpCodeValue()];
+   return TR::InstOpCode::metadata[opCode->getOpCodeValue()].name;
    }
 
 TR::S390VInstruction::~S390VInstruction()

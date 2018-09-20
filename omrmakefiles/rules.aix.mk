@@ -106,8 +106,8 @@ ifeq (ld,$(LINKTOOL))
   endif
   GLOBAL_LDFLAGS+=-G -bnoentry -bernotok
   GLOBAL_LDFLAGS+=-bmap:$(MODULE_NAME).map
-  GLOBAL_LDFLAGS+=-bE:$($(MODULE_NAME)_LINKER_EXPORT_SCRIPT) -L/usr/vac/lib
-  GLOBAL_SHARED_LIBS+=c_r C_r m pthread xlopt
+  GLOBAL_LDFLAGS+=-bE:$($(MODULE_NAME)_LINKER_EXPORT_SCRIPT)
+  GLOBAL_SHARED_LIBS+=c_r C_r m pthread 
 else
   ifeq (1,$(OMR_ENV_DATA64))
     GLOBAL_LDFLAGS+=-X64
@@ -128,11 +128,13 @@ endef
 define LINK_C_SHARED_COMMAND
 -$(RM) $@
 $(CCLINKSHARED) -o $@ $(OBJECTS) $(LDFLAGS) $(MODULE_LDFLAGS) $(GLOBAL_LDFLAGS)
+cp $@ $@.dbg
 endef
 
 define LINK_CXX_SHARED_COMMAND
 -$(RM) $@
 $(CXXLINKSHARED) -o $@ $(OBJECTS) $(LDFLAGS) $(MODULE_LDFLAGS) $(GLOBAL_LDFLAGS)
+cp $@ $@.dbg
 endef
 
 endif # ARTIFACT_TYPE contains "shared"

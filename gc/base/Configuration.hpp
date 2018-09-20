@@ -93,6 +93,22 @@ public:
 	bool initializeHeapRegionDescriptor(MM_EnvironmentBase *env, MM_HeapRegionDescriptor *region) { return _delegate.initializeHeapRegionDescriptorExtension(env, region); }
 	void teardownHeapRegionDescriptor(MM_EnvironmentBase *env, MM_HeapRegionDescriptor *region) { _delegate.teardownHeapRegionDescriptorExtension(env, region); }
 
+	MMINLINE MM_GCWriteBarrierType getBarrierType() { return _writeBarrierType; }
+
+	MMINLINE bool
+	isSnapshotAtTheBeginningBarrierEnabled()
+	{
+		return (getBarrierType() == gc_modron_wrtbar_satb_and_oldcheck) ||
+				(getBarrierType() == gc_modron_wrtbar_satb);
+	}
+
+	MMINLINE bool
+	isIncrementalUpdateBarrierEnabled()
+	{
+		return (getBarrierType() == gc_modron_wrtbar_cardmark_and_oldcheck) ||
+				(getBarrierType() == gc_modron_wrtbar_cardmark);
+	}
+
 	/**
 	 * Delegated method to determine when to start tracking heap fragmentation, which should be inhibited
 	 * until the heap has grown to a stable operational size.
@@ -148,14 +164,15 @@ protected:
 	 * @return whether NUMAMAnager was initialized or not.  False implies startup failure.
 	 */
 	virtual bool initializeNUMAManager(MM_EnvironmentBase* env);
-
-private:
+	
 	/**
 	 * Sets the number of gc threads
 	 *
 	 * @param env[in] - the current environment
 	 */
-	void initializeGCThreadCount(MM_EnvironmentBase* env);
+	virtual void initializeGCThreadCount(MM_EnvironmentBase* env);
+	
+private:
 
 	/**
 	 * Sets GC parameters that are dependent on the number of gc threads (if not previously initialized):

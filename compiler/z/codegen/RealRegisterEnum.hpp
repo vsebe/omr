@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -72,7 +72,7 @@
       LastFPR           = FPR15,
       LastAssignableFPR = FPR15,
 
-      VRFBase           = FPRBase,
+      VRFBase           = FPRBase, /* The base is same because VRF0-15 overlap with FPR0-15 */
 
       VRF0              = VRFBase + 1,
       VRF1              = VRFBase + 2,
@@ -113,28 +113,8 @@
       LastAssignableVRF = VRF31,
       FirstOverlapVRF   = VRF0,
       LastOverlapVRF    = VRF15,
-      ARBase            = LastAssignableVRF,
 
-      AR0               = ARBase + 1,
-      AR1               = ARBase + 2,
-      AR2               = ARBase + 3,
-      AR3               = ARBase + 4,
-      AR4               = ARBase + 5,
-      AR5               = ARBase + 6,
-      AR6               = ARBase + 7,
-      AR7               = ARBase + 8,
-      AR8               = ARBase + 9,
-      AR9               = ARBase + 10,
-      AR10              = ARBase + 11,
-      AR11              = ARBase + 12,
-      AR12              = ARBase + 13,
-      AR13              = ARBase + 14,
-      AR14              = ARBase + 15,
-      AR15              = ARBase + 16,
-
-      FirstAR           = AR0,
-      LastAR            = AR15,
-      HPRBase           = LastAR,
+      HPRBase           = LastVRF,
 
       HPR0              = HPRBase + 1,
       HPR1              = HPRBase + 2,
@@ -154,23 +134,4 @@
       HPR15             = HPRBase + 16,
 
       FirstHPR          = HPR0,
-      LastHPR           = HPR15,
-
-      MISC              = LastHPR,
-
-      EvenOddPair         = MISC + 1,      // Assign an even/odd pair to the reg pair
-      LegalEvenOfPair     = MISC + 2,      // Assign an even reg that is followed by an unlocked odd register
-      LegalOddOfPair      = MISC + 3,      // Assign an odd reg that is preceded by an unlocked even register
-      FPPair              = MISC + 4,      // Assign an FP pair to the reg pair
-      LegalFirstOfFPPair  = MISC + 5,      // Assign first FP reg of a FP reg Pair
-      LegalSecondOfFPPair = MISC + 6,      // Assign second FP reg of a FP reg Pair
-      AssignAny           = MISC + 7,      // Assign any register
-      KillVolAccessRegs   = MISC + 8,      // Kill all volatile access regs
-      KillVolHighRegs     = MISC + 9,      // Kill all volatile access regs
-      MayDefine           = MISC + 10,     // This instruction's result should be modelled as live before as this instruction only 'may defines' the register
-      SpilledReg          = MISC + 11,     // OOL: Any Spilled register cross OOL sequences
-      ArGprPair           = MISC + 12,     // Assign an ar/gpr pair to the reg pair
-      ArOfArGprPair       = MISC + 13,     // Assign AR register corresponding to GPR in the second RA pass
-      GprOfArGprPair      = MISC + 14,     // Assign GPR register in the first RA pass
-
-      NumRegisters        = LastHPR + 1    // (include noReg)
+      LastHPR           = HPR15

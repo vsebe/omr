@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,8 +19,8 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#ifndef OMR_POWER_CODEGENERATORBASE_INCL
-#define OMR_POWER_CODEGENERATORBASE_INCL
+#ifndef OMR_POWER_CODEGENERATOR_INCL
+#define OMR_POWER_CODEGENERATOR_INCL
 
 /*
  * The following #define and typedef must appear before any #includes in this file
@@ -30,7 +30,7 @@
 namespace OMR { namespace Power { class CodeGenerator; } }
 namespace OMR { typedef OMR::Power::CodeGenerator CodeGeneratorConnector; }
 #else
-#error OMR::Power::CodeGenerator expected to be a primary connector, but a OMR connector is already defined
+#error OMR::Power::CodeGenerator expected to be a primary connector, but an OMR connector is already defined
 #endif
 
 #include "compiler/codegen/OMRCodeGenerator.hpp"
@@ -157,12 +157,6 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
 
    public:
 
-   typedef enum
-      {
-      Backward = 0,
-      Forward  = 1
-      } RegisterAssignmentDirection;
-
    List<TR_BackingStore> * conversionBuffer;
    ListIterator<TR_BackingStore> * conversionBufferIt;
    TR_BackingStore * allocateStackSlot();
@@ -217,12 +211,6 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
    TR::Register *gprClobberEvaluate(TR::Node *node);
 
    const TR::PPCLinkageProperties &getProperties() { return *_linkageProperties; }
-
-   RegisterAssignmentDirection getAssignmentDirection() {return _assignmentDirection;}
-   RegisterAssignmentDirection setAssignmentDirection(RegisterAssignmentDirection d)
-      {
-      return (_assignmentDirection = d);
-      }
 
    using OMR::CodeGenerator::apply16BitLabelRelativeRelocation;
    void apply16BitLabelRelativeRelocation(int32_t * cursor, TR::LabelSymbol *);
@@ -448,7 +436,7 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
    int64_t getSmallestPosConstThatMustBeMaterialized() {return 32768;}  // maximum 16-bit signed int plus 1
    bool shouldValueBeInACommonedNode(int64_t); // no virt, cast
 
-   bool ilOpCodeIsSupported(TR::ILOpCodes);
+   static bool isILOpCodeSupported(TR::ILOpCodes);
    // Constant Data update
    bool checkAndFetchRequestor(TR::Instruction *instr, TR::Instruction **q);
 
@@ -461,8 +449,6 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
    TR::Instruction *generateDebugCounterBump(TR::Instruction *cursor, TR::DebugCounterBase *counter, TR::Register *deltaReg, TR::RegisterDependencyConditions *cond);
    TR::Instruction *generateDebugCounterBump(TR::Instruction *cursor, TR::DebugCounterBase *counter, int32_t delta, TR_ScratchRegisterManager &srm);
    TR::Instruction *generateDebugCounterBump(TR::Instruction *cursor, TR::DebugCounterBase *counter, TR::Register *deltaReg, TR_ScratchRegisterManager &srm);
-
-   bool supportsDebugCounters(TR::DebugCounterInjectionPoint injectionPoint){ return injectionPoint != TR::TR_AfterRegAlloc; }
 
    int32_t arrayTranslateMinimumNumberOfElements(bool isByteSource, bool isByteTarget) { return 8; } //FIXME
    int32_t arrayTranslateAndTestMinimumNumberOfIterations() { return 8; } //FIXME
@@ -554,7 +540,6 @@ class OMR_EXTENSIBLE CodeGenerator : public OMR::CodeGenerator
    TR_Array<TR::Register *>          _transientLongRegisters;
    TR::list<TR_PPCOutOfLineCodeSection*> _outOfLineCodeSectionList;
    flags32_t                        _flags;
-   RegisterAssignmentDirection      _assignmentDirection;
 
    uint32_t                         _numGPR;
    uint32_t                         _firstGPR;

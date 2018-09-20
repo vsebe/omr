@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -20,23 +20,23 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 #include <windows.h>
 #else
 #include <time.h>
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 
 #include "omrportasserts.h"
 
 #include <stdarg.h>
 #include <string.h>
-#ifdef WIN32
+#if defined(OMR_OS_WINDOWS)
 #include <malloc.h>
 #elif defined(LINUX) || defined(AIXPPC) || defined(OSX)
 #include <alloca.h>
 #elif defined(J9ZOS390)
 #include <stdlib.h>
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 #include <errno.h>
 
 /*
@@ -170,12 +170,14 @@ static int32_t convertMutf8ToWide(const uint8_t **inBuffer, uintptr_t *inBufferS
 static int32_t convertPlatformToWide(struct OMRPortLibrary *portLibrary, charconvState_t encodingState, uint32_t codePage, const uint8_t **inBuffer, uintptr_t *inBufferSize, uint8_t *outBuffer, uintptr_t outBufferSize);
 static int32_t convertWideToPlatform(struct OMRPortLibrary *portLibrary, charconvState_t encodingState, const uint8_t **inBuffer, uintptr_t *inBufferSize, uint8_t *outBuffer, uintptr_t outBufferSize);
 static int32_t convertLatin1ToMutf8(struct OMRPortLibrary *portLibrary, const uint8_t **inBuffer, uintptr_t *inBufferSize, uint8_t *outBuffer, uintptr_t outBufferSize);
-#if defined(WIN32)
+static int32_t convertMutf8ToLatin1(struct OMRPortLibrary *portLibrary, const uint8_t **inBuffer, uintptr_t *inBufferSize, uint8_t *outBuffer, uintptr_t outBufferSize);
+
+#if defined(OMR_OS_WINDOWS)
 static void convertJ9TimeToSYSTEMTIME(J9TimeInfo *j9TimeInfo, SYSTEMTIME *systemTime);
 static void convertTimeMillisToJ9Time(int64_t timeMillis, J9TimeInfo *tm);
 static void convertSYSTEMTIMEToJ9Time(SYSTEMTIME *systemTime, J9TimeInfo *j9TimeInfo);
 static BOOLEAN firstDateComesBeforeSecondDate(J9TimeInfo *firstDate, J9TimeInfo *secondDate);
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 
 /**
  * Write characters to a string as specified by format.
@@ -238,8 +240,7 @@ omrstr_printf(struct OMRPortLibrary *portLibrary, char *buf, uintptr_t bufLen, c
  *  	The following translations are supported:
  *  	ANSI code page to modified UTF-8 (Windows only)
  *  	platform raw to [wide, modified UTF-8, UTF-8]
- *  	modified UTF-8 to [platform raw, wide]
- *  	[Latin-1, UTF-8] to modified UTF-8
+ *  	modified UTF-8 to [platform raw, wide, ISO Latin-1 (8859-1)]
  *  	wide to [modified UTF-8, platform raw]
  *  	[ISO Latin-1 (8859-1), UTF-8, Windows ANSI default and current code pages] to modified UTF-8
  * @note J9STR_CODE_PLATFORM_OMR_INTERNAL is an alias for other encodings depending on the platform.
@@ -274,7 +275,7 @@ omrstr_convert(struct OMRPortLibrary *portLibrary, int32_t fromCode, int32_t toC
 		}
 	}
 	break;
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 	case J9STR_CODE_WINTHREADACP:
 	case J9STR_CODE_WINDEFAULTACP: {
 		switch (toCode) {
@@ -287,12 +288,25 @@ omrstr_convert(struct OMRPortLibrary *portLibrary, int32_t fromCode, int32_t toC
 		}
 	}
 	break;
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 	case J9STR_CODE_MUTF8: {
 		switch (toCode) {
 		case J9STR_CODE_PLATFORM_RAW:
 			result = convertMutf8ToPlatform(portLibrary, inBuffer, inBufferSize, outBuffer, outBufferSize);
 			break;
+		case J9STR_CODE_LATIN1: {
+			const uint8_t *mutf8Cursor = inBuffer;
+			uintptr_t mutf8Remaining = inBufferSize;
+			result = convertMutf8ToLatin1(portLibrary, &mutf8Cursor, &mutf8Remaining, outBuffer, outBufferSize);
+			/*
+			 * convertMutf8ToLatin1 is resumable so does not return error if buffer too small.
+			 * In this case we should have consumed all the data
+			 */
+			if (mutf8Remaining > 0) {
+				result = OMRPORT_ERROR_STRING_BUFFER_TOO_SMALL;
+			}
+		}
+		break;
 		case J9STR_CODE_WIDE: {
 			const uint8_t *mutf8Cursor = inBuffer;
 			uintptr_t mutf8Remaining = inBufferSize;
@@ -360,14 +374,14 @@ omrstr_convert(struct OMRPortLibrary *portLibrary, int32_t fromCode, int32_t toC
 	case J9STR_CODE_LATIN1: {
 		switch (toCode) {
 		case J9STR_CODE_MUTF8: {
-			const uint8_t *utf8Cursor = inBuffer;
-			uintptr_t utf8Remaining = inBufferSize;
-			result = convertLatin1ToMutf8(portLibrary, &utf8Cursor, &utf8Remaining, outBuffer, outBufferSize);
+			const uint8_t *latin1Cursor = inBuffer;
+			uintptr_t latin1Remaining = inBufferSize;
+			result = convertLatin1ToMutf8(portLibrary, &latin1Cursor, &latin1Remaining, outBuffer, outBufferSize);
 			/*
 			 * convertLatin1ToMutf8 is resumable so does not return error if buffer too small.
 			 * In this case we should have consumed all the data
 			 */
-			if (utf8Remaining > 0) {
+			if (latin1Remaining > 0) {
 				result = OMRPORT_ERROR_STRING_BUFFER_TOO_SMALL;
 			}
 
@@ -929,16 +943,18 @@ writeStringToBuffer(char *buf, uintptr_t bufLen, uint64_t width, uint64_t precis
 	if (leftPadding > bufLen) {
 		leftPadding = bufLen;
 	}
-	if (buf && (0 != leftPadding)) {
-		memset(buf, ' ', leftPadding);
-		buf += leftPadding;
+	if (0 != leftPadding) {
+		if (NULL != buf) {
+			memset(buf, ' ', leftPadding);
+			buf += leftPadding;
+		}
+		bufLen -= leftPadding;
 	}
-	bufLen -= leftPadding;
 
 	if (precision > bufLen) {
 		precision = bufLen;
 	}
-	if (buf) {
+	if (NULL != buf) {
 		memcpy(buf, value, (size_t)precision);
 		buf += (size_t)precision;
 	}
@@ -947,9 +963,8 @@ writeStringToBuffer(char *buf, uintptr_t bufLen, uint64_t width, uint64_t precis
 	if (rightPadding > bufLen) {
 		rightPadding = bufLen;
 	}
-	if (buf && (0 != rightPadding)) {
+	if ((NULL != buf) && (0 != rightPadding)) {
 		memset(buf, ' ', rightPadding);
-		/*buf += rightPadding;*/
 	}
 
 	return leftPadding + (size_t)precision + rightPadding;
@@ -1157,14 +1172,16 @@ writeUnicodeStringToBuffer(char *buf, uintptr_t bufLen, uint64_t width, uint64_t
 	if (leftPadding > bufLen) {
 		leftPadding = bufLen;
 	}
-	if (buf) {
-		memset(buf, ' ', leftPadding);
-		buf += leftPadding;
+	if (0 != leftPadding) {
+		if (NULL != buf) {
+			memset(buf, ' ', leftPadding);
+			buf += leftPadding;
+		}
+		bufLen -= leftPadding;
 	}
-	bufLen -= leftPadding;
 
 	/* The space required for the UTF8 chars is guaranteed to be there */
-	if (buf) {
+	if (NULL != buf) {
 		currentU16 = value;
 		while (numberOfUnicodeChar-- > 0) {
 			buf += encodeUTF8Char((uintptr_t)*currentU16++, (uint8_t *)buf);
@@ -1175,7 +1192,7 @@ writeUnicodeStringToBuffer(char *buf, uintptr_t bufLen, uint64_t width, uint64_t
 	if (rightPadding > bufLen) {
 		rightPadding = bufLen;
 	}
-	if (buf) {
+	if ((NULL != buf) && (0 != rightPadding)) {
 		memset(buf, ' ', rightPadding);
 	}
 
@@ -1250,7 +1267,7 @@ setJ9TimeToEpoch(struct J9TimeInfo *tm)
  */
 static void convertUTCMillisToLocalJ9Time(int64_t millisUTC, struct J9TimeInfo *omrtimeInfo)
 {
-#if !defined(WIN32)
+#if !defined(OMR_OS_WINDOWS)
 
 	time_t secondsUTC;
 	struct tm localTime;
@@ -1278,7 +1295,7 @@ static void convertUTCMillisToLocalJ9Time(int64_t millisUTC, struct J9TimeInfo *
 
 	return;
 
-#else /* !defined(WIN32) */
+#else /* !defined(OMR_OS_WINDOWS) */
 
 	TIME_ZONE_INFORMATION timeZoneInformation;
 	J9TimeInfo daylightDateAsJ9TimeInfo, standardDateAsJ9TimeInfo;
@@ -1306,14 +1323,14 @@ static void convertUTCMillisToLocalJ9Time(int64_t millisUTC, struct J9TimeInfo *
 			setJ9TimeToEpoch(omrtimeInfo);
 #if defined(J9STR_DEBUG)
 			printf("!!!! SystemTimeToTzSpecificLocalTime failed !!!!");
-#endif
+#endif /* defined(J9STR_DEBUG) */
 		}
 		return;
 	}
 
 	/* Get the TimeZone Information needed to convert to local time */
 	rc = GetTimeZoneInformation(&timeZoneInformation);
-#if ( defined(WIN32) || (_WIN32_WCE>=420) )
+#if ( defined(OMR_OS_WINDOWS) || (_WIN32_WCE>=420) )
 	if (rc == TIME_ZONE_ID_INVALID) {
 		return;
 	}
@@ -1395,11 +1412,11 @@ static void convertUTCMillisToLocalJ9Time(int64_t millisUTC, struct J9TimeInfo *
 
 	return;
 
-#endif /* !defined(WIN32) */
+#endif /* !defined(OMR_OS_WINDOWS) */
 
 }
 
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 /*
  * @internal
  *
@@ -1683,7 +1700,7 @@ convertTimeMillisToJ9Time(int64_t timeMillis, J9TimeInfo *tm)
 
 }
 
-#endif /* defined(WIN32) */
+#endif /* defined(OMR_OS_WINDOWS) */
 
 /**
  * @internal
@@ -2470,7 +2487,7 @@ convertPlatformToMutf8(struct OMRPortLibrary *portLibrary, uint32_t codePage, co
 	uintptr_t mutf8Limit = outBufferSize;
 	BOOLEAN firstConversion = TRUE;
 	/* set up buffers and convertors */
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 	uintptr_t requiredBufferSize = 0;
 	encodingState = NULL;
 	/* MultiByteToWideChar is not resumable, so we need a buffer large enough to hold the entire intermediate result */
@@ -2484,7 +2501,7 @@ convertPlatformToMutf8(struct OMRPortLibrary *portLibrary, uint32_t codePage, co
 		wideBufferSize = requiredBufferSize;
 	}
 
-#endif /* if windows */
+#endif /* defined(OMR_OS_WINDOWS) */
 
 #if defined(J9STR_USE_ICONV)
 	/* use the EBCDIC string for UTF-16 on z/OS */
@@ -2502,12 +2519,12 @@ convertPlatformToMutf8(struct OMRPortLibrary *portLibrary, uint32_t codePage, co
 		uintptr_t tempWideBufferSize = wideBufferPartialSize;
 
 		if (wideBufferPartialSize < 0) {
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 			/* the working buffer is dynamically allocated only on Windows */
 			if (wideBuffer != onStackBuffer) {
 				portLibrary->mem_free_memory(portLibrary, wideBuffer);
 			}
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 #if defined(J9STR_USE_ICONV)
 			iconv_free(portLibrary, OMRPORT_LANG_TO_UTF16_ICONV_DESCRIPTOR, encodingState);
 #endif
@@ -2523,12 +2540,12 @@ convertPlatformToMutf8(struct OMRPortLibrary *portLibrary, uint32_t codePage, co
 		}
 		/* updates platformCursor to character after the last translated character */
 		if (wideBufferPartialSize < 0) {
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 			/* the working buffer is dynamically allocated only on Windows */
 			if (wideBuffer != onStackBuffer) {
 				portLibrary->mem_free_memory(portLibrary, wideBuffer);
 			}
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 #if defined(J9STR_USE_ICONV)
 			iconv_free(portLibrary, OMRPORT_LANG_TO_UTF16_ICONV_DESCRIPTOR, encodingState);
 #endif
@@ -2537,11 +2554,11 @@ convertPlatformToMutf8(struct OMRPortLibrary *portLibrary, uint32_t codePage, co
 		/* Now convert the result to modified UTF-8 */
 		mutf8PartialSize = convertWideToMutf8(&tempWideBuffer, &tempWideBufferSize, mutf8Cursor, mutf8Limit);
 		if (0 != tempWideBufferSize) { /* should have consumed all the data */
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 			if (wideBuffer != onStackBuffer) {
 				portLibrary->mem_free_memory(portLibrary, wideBuffer);
 			}
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 #if defined(J9STR_USE_ICONV)
 			iconv_free(portLibrary, OMRPORT_LANG_TO_UTF16_ICONV_DESCRIPTOR, encodingState);
 #endif
@@ -2554,11 +2571,11 @@ convertPlatformToMutf8(struct OMRPortLibrary *portLibrary, uint32_t codePage, co
 			}
 		}
 	}
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 	if (wideBuffer != onStackBuffer) {
 		portLibrary->mem_free_memory(portLibrary, wideBuffer);
 	}
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 #if defined(J9STR_USE_ICONV)
 	iconv_free(portLibrary, OMRPORT_LANG_TO_UTF16_ICONV_DESCRIPTOR, encodingState);
 #endif
@@ -2592,9 +2609,9 @@ convertMutf8ToPlatform(struct OMRPortLibrary *portLibrary, const uint8_t *inBuff
 		/* wideBuffer is always on stack - no need to free it */
 		return OMRPORT_ERROR_STRING_ICONV_OPEN_FAILED;
 	}
-#elif defined(WIN32)
+#elif defined(OMR_OS_WINDOWS)
 	encodingState = NULL;
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 	while (mutf8Remaining > 0) { /* translated section by section as dictated by the size of wideBuffer */
 		uint8_t wideBuffer[CONVERSION_BUFFER_SIZE];
 		const uint8_t *wideBufferCursor = wideBuffer;
@@ -2811,6 +2828,71 @@ convertLatin1ToMutf8(struct OMRPortLibrary *portLibrary, const uint8_t **inBuffe
 }
 
 /**
+ * Convert modified UTF-8 encoding to ISO Latin-1 (8859-1)
+ * May terminate early if the output buffer is too small.
+ * If the buffer is large enough, the byte after the last output character is set to 0.
+ * Resumable, so it updates its inputs
+ * @param[inout]  inBuffer input string  to be converted. Updated to first untranslated character.
+ * @param[inout]  inBufferSize input string size in bytes. Updated to number of untranslated characters.
+ * @param[in] outBuffer user-allocated output buffer that stores converted characters, ignored if outBufferSize is 0.
+ * @param[in] outBufferSize output buffer size in bytes (zero to request the output buffer size).
+ * @return number of bytes generated, or required size of output buffer if outBufferSize is 0.
+ * @note callers are responsible for detecting buffer overflow.
+ */
+static int32_t
+convertMutf8ToLatin1(struct OMRPortLibrary *portLibrary, const uint8_t **inBuffer, uintptr_t *inBufferSize, uint8_t *outBuffer, uintptr_t outBufferSize)
+{
+	const uint8_t *mutf8String = *inBuffer;
+	uintptr_t mutf8Remaining = *inBufferSize; /* number of untranslated characters in inBuffer */
+	uint8_t *latinString = outBuffer; /* mutable copy */
+	uintptr_t latinRemaining = outBufferSize; /* number of unused bytes in outBuffer */
+	int32_t resultSize = 0;
+
+	while ((mutf8Remaining > 0)
+			&& ((latinRemaining > 0) || (0 == outBufferSize)) /* outBufferSize == 0 indicates we just want the length */
+			&& (resultSize >= 0)
+	) {
+		/* still have input data, output space, and no errors */
+		/* convert in CONVERSION_BUFFER_SIZE-size segments */
+		uintptr_t wideLimit = (mutf8Remaining > CONVERSION_BUFFER_SIZE) ? CONVERSION_BUFFER_SIZE : mutf8Remaining;
+		uint16_t localWideBuffer[CONVERSION_BUFFER_SIZE]; /* handle short strings without allocating memory */
+		uint16_t *wideBuffer = localWideBuffer;
+		uintptr_t wideLength = wideLimit * 2; /* wide conversion byte length */
+		uintptr_t wideRemaining = wideLength;
+		uintptr_t mutf8BytesConsumed = 0;
+
+		/* convert from mutf8 to unicode */
+		int32_t unicodeResultBytes = convertMutf8ToWide(&mutf8String, &mutf8Remaining, (uint8_t *)wideBuffer, wideRemaining);
+		mutf8BytesConsumed = (wideLength - wideRemaining) / 2; /* 1 mutf8 byte per 2 wide characters */
+		mutf8Remaining -= mutf8BytesConsumed;
+		mutf8String += mutf8BytesConsumed; /* Now points to first unconsumed character */
+		if (unicodeResultBytes < 0) {
+			/* conversion error */
+			resultSize = unicodeResultBytes;
+		} else {
+			int32_t latin1CharactersConverted = (unicodeResultBytes / 2); /* Latin1 characters take up only 1 of 2 wide bytes */
+			resultSize += latin1CharactersConverted;
+			if (outBufferSize != 0) {
+				int32_t cursor = 0;
+				/* copy Latin 1 characters from 16 bytes to 8 bytes */
+				for (cursor = 0; cursor < latin1CharactersConverted; ++cursor) {
+					latinString[cursor] = wideBuffer[cursor] & 0xff;
+				}
+				latinRemaining -= latin1CharactersConverted;
+				latinString += latin1CharactersConverted;
+			}
+
+		}
+	}
+	if (resultSize >= 0) { /* no error */
+		*inBuffer = mutf8String;
+		*inBufferSize = mutf8Remaining; /* update caller's arguments */
+		/* convertMutf8ToWide null terminated the string, if possible */
+	}
+	return resultSize;
+}
+
+/**
  * Test if the second and later bytes of a UTF-8 character are well-formed, i.e. 2 MSbs are 10
  * If they are and mutf8Bytes is not null, copy the bytes.
  * @param utf8Bytes pointer to the first byte of a UTF-8 character
@@ -3007,7 +3089,7 @@ static int32_t
 convertPlatformToWide(struct OMRPortLibrary *portLibrary, charconvState_t encodingState, uint32_t codePage, const uint8_t **inBuffer, uintptr_t *inBufferSize, uint8_t *outBuffer, uintptr_t outBufferSize)
 {
 	int32_t resultSize = -1;
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 	int32_t mbChars = (int32_t)MultiByteToWideChar(codePage, OS_ENCODING_MB_FLAGS, (LPCSTR)*inBuffer, (int)*inBufferSize, (LPWSTR)outBuffer, (int)outBufferSize);
 	if ((outBufferSize > 0) && (0 == mbChars)) {
 		resultSize = OMRPORT_ERROR_STRING_BUFFER_TOO_SMALL; /* should not happen: caller should have allocated a sufficiently large buffer */
@@ -3034,7 +3116,7 @@ convertPlatformToWide(struct OMRPortLibrary *portLibrary, charconvState_t encodi
 	} else {
 		resultSize = (outBufferSize - wideBufferLimit); /* number of bytes written */
 	}
-#endif
+#endif /* defined(OMR_OS_WINDOWS) */
 	if ((outBufferSize > 0) && ((outBufferSize - resultSize) >= 2)) {
 		uint16_t *terminator = (uint16_t *) &outBuffer[resultSize];
 		*terminator = 0;
@@ -3100,7 +3182,7 @@ convertWideToPlatform(struct OMRPortLibrary *portLibrary, charconvState_t encodi
 		*inBuffer = platformCursor;
 		*inBufferSize = platformLimit;
 	}
-#elif defined(WIN32)
+#elif defined(OMR_OS_WINDOWS)
 	LPCWSTR wideCursor = (LPCWSTR)*inBuffer;
 	uintptr_t wideRemaining = *inBufferSize / WIDE_CHAR_SIZE;
 	resultSize = WideCharToMultiByte(OS_ENCODING_CODE_PAGE, OS_ENCODING_MB_FLAGS, wideCursor,
@@ -3127,5 +3209,4 @@ convertWideToPlatform(struct OMRPortLibrary *portLibrary, charconvState_t encodi
 	}
 
 	return resultSize;
-
 }

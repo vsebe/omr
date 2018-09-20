@@ -98,7 +98,9 @@ MM_EnvironmentStandard::flushGCCaches()
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	if (getExtensions()->concurrentScavenger) {
 		if (MUTATOR_THREAD == getThreadType()) {
-			getExtensions()->scavenger->threadFinalReleaseCopyCaches(this, this);
+			if (NULL != getExtensions()->scavenger) {
+				getExtensions()->scavenger->threadFinalReleaseCopyCaches(this, this);
+			}
 		}
 	}
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */

@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2017, 2017 IBM Corp. and others
+# Copyright (c) 2017, 2018 IBM Corp. and others
 #
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,6 +19,9 @@
 #
 # SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
 ###############################################################################
+
+# TODO: OMR_RTTI flag
+# TODO: Version things
 
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 
@@ -66,23 +69,6 @@ add_custom_target(omr_install_tooling
 )
 
 ###
-### Getting the glue target
-###
-set(OMR_GC_GLUE_TARGET "omr_example_gc_glue" CACHE STRING "The gc glue target, must be interface library")
-set(OMR_UTIL_GLUE_TARGET "omr_example_util_glue" CACHE STRING "The util glue target, must be interface library")
-set(OMR_RAS_GLUE_TARGET "omr_example_ras_glue" CACHE STRING "The ras glue target, must be interface library")
-set(OMR_CORE_GLUE_TARGET "omr_example_core_glue" CACHE STRING "The core glue target, must be and interface library")
-
-# TODO should we always be adding this?  Likely only when compiling OMR proper for testing. Otherwise we would want
-# to add the languages glue folder
-add_subdirectory(example/glue)
-
-# TODO: OMR_EXAMPLE flag
-# TODO: OMR_RTTI flag
-
-# TODO: Version things
-
-###
 ### Versions and stuff
 ###
 
@@ -116,6 +102,10 @@ endif()
 configure_file(./omrcfg.CMakeTemplate.h omrcfg.h)
 configure_file(./omrversionstrings.CMakeTemplate.h omrversionstrings.h)
 
+###
+### Native Tooling
+###
+
 if(OMR_TOOLS_IMPORTFILE)
 	include("${OMR_TOOLS_IMPORTFILE}")
 elseif(OMR_TOOLS)
@@ -124,14 +114,31 @@ else()
 	message(FATAL_ERROR "OMR: Build tools are required. See OMR_TOOLS and OMR_TOOLS_IMPORTFILE")
 endif()
 
-add_subdirectory(compiler)
+
+###
+### Built-in OMR Applications.
+###
+
+# Each application provides it's own glue, so must be included before subdirectories.
+# The example and om are not yet compatible.
+if (OMR_EXAMPLE)
+	add_subdirectory(example)
+endif (OMR_EXAMPLE)
+
+###
+### Core OMR components
+###
+
 add_subdirectory(thread)
 add_subdirectory(port)
 add_subdirectory(util)
-add_subdirectory(omrtrace)
 add_subdirectory(omr)
 add_subdirectory(third_party)
 add_subdirectory(omrsigcompat)
+
+if(OMR_RAS_TDF_TRACE)
+	add_subdirectory(omrtrace)
+endif(OMR_RAS_TDF_TRACE)
 
 if(OMR_GC)
 	add_subdirectory(gc)
@@ -140,6 +147,10 @@ endif(OMR_GC)
 if(OMR_DDR)
 	add_subdirectory(ddr)
 endif(OMR_DDR)
+
+if(OMR_JIT)
+	add_subdirectory(compiler)
+endif()
 
 if(OMR_JITBUILDER)
 	add_subdirectory(jitbuilder)

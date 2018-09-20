@@ -53,7 +53,6 @@ endif
 
 ifeq (win,$(OMR_HOST_OS))
   MODULE_SHARED_LIBS += ws2_32 shell32 Iphlpapi psapi pdh
-  MODULE_INCLUDES += $(ddrgen_srcdir)/scanners/pdb/DIA-SDK/include
 endif
 
 ifeq (osx,$(OMR_HOST_OS))
@@ -66,6 +65,10 @@ endif
 
 ifeq (msvc,$(OMR_TOOLCHAIN))
   MODULE_CXXFLAGS += /EHsc
+endif
+
+ifeq (1,$(OMRPORT_OMRSIG_SUPPORT))
+  MODULE_SHARED_LIBS += omrsig
 endif
 
 DDRGEN_STATIC_LIBS = \

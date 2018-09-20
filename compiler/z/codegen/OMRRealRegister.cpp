@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -304,23 +304,14 @@ OMR::Z::RealRegister::setRegister4Field(uint32_t *instruction,RegNum reg)
 bool
 OMR::Z::RealRegister::isPseudoRealReg(RegNum reg)
   {
-  if (reg < FirstGPR                              ||
-      (reg > LastAssignableGPR && reg < FirstFPR) ||
-       reg > LastAssignableFPR)
-     {
-     return true;
-     }
-  else
-     {
-    return false;
-    }
+  return (reg < FirstGPR || reg > LastHPR);
   }
 
 // static method
 bool
 OMR::Z::RealRegister::isRealReg(RegNum reg)
    {
-   return !TR::RealRegister::isPseudoRealReg(reg);
+   return (reg >= FirstGPR && reg <= LastHPR);
    }
 
 // static method
@@ -341,16 +332,6 @@ OMR::Z::RealRegister::isFPR(RegNum reg)
      return true;
    else
      return false;
-   }
-
-// static method
-bool
-OMR::Z::RealRegister::isAR(RegNum reg)
-   {
-   if(reg >= FirstAR && reg <= LastAR)
-      return true;
-   else
-      return false;
    }
 
 // static method
@@ -444,22 +425,6 @@ const uint8_t OMR::Z::RealRegister::_fullRegBinaryEncodings[TR::RealRegister::Nu
    0x1E,        // VRF30
    0x1F,        // VRF31
 
-   0x00,        // AR0
-   0x01,        // AR1
-   0x02,        // AR2
-   0x03,        // AR3
-   0x04,        // AR4
-   0x05,        // AR5
-   0x06,        // AR6
-   0x07,        // AR7
-   0x08,        // AR8
-   0x09,        // AR9
-   0x0A,        // AR10
-   0x0B,        // AR11
-   0x0C,        // AR12
-   0x0D,        // AR13
-   0x0E,        // AR14
-   0x0F,        // AR15
    0x00,        // HPR0
    0x01,        // HPR1
    0x02,        // HPR2

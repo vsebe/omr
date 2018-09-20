@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2016 IBM Corp. and others
+ * Copyright (c) 2016, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -24,7 +24,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <dlfcn.h>
 #include <errno.h>
 
 #include "Jit.hpp"
@@ -32,7 +31,7 @@
 #include "ilgen/MethodBuilder.hpp"
 #include "IterativeFib.hpp"
 
-IterativeFibonnaciMethod::IterativeFibonnaciMethod(TR::TypeDictionary *types)
+IterativeFibonacciMethod::IterativeFibonacciMethod(TR::TypeDictionary *types)
    : MethodBuilder(types)
    {
    DefineLine(LINETOSTR(__LINE__));
@@ -44,7 +43,7 @@ IterativeFibonnaciMethod::IterativeFibonnaciMethod(TR::TypeDictionary *types)
    }
 
 bool
-IterativeFibonnaciMethod::buildIL()
+IterativeFibonacciMethod::buildIL()
    {
    TR::IlBuilder *returnN = NULL;
    IfThen(&returnN,
@@ -98,7 +97,7 @@ main(int argc, char *argv[])
    TR::TypeDictionary types;
 
    printf("Step 3: compile method builder\n");
-   IterativeFibonnaciMethod iterFibMethodBuilder(&types);
+   IterativeFibonacciMethod iterFibMethodBuilder(&types);
    uint8_t *entry=0;
    int32_t rc = compileMethodBuilder(&iterFibMethodBuilder, &entry);
    if (rc != 0)

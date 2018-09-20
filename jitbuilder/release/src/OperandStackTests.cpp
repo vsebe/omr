@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2017 IBM Corp. and others
+ * Copyright (c) 2016, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -24,7 +24,6 @@
 #include <iostream>
 #include <stdlib.h>
 #include <stdint.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <stdarg.h>
 
@@ -46,17 +45,17 @@ typedef struct Thread
    STACKVALUETYPE *sp;
    } Thread;
 
-class TestState : public OMR::VirtualMachineState
+class TestState : public TR::VirtualMachineState
    {
    public:
    TestState()
-      : OMR::VirtualMachineState(),
+      : TR::VirtualMachineState(),
       _stack(NULL),
       _stackTop(NULL)
       { }
 
-   TestState(OMR::VirtualMachineOperandStack *stack, OMR::VirtualMachineRegister *stackTop)
-      : OMR::VirtualMachineState(),
+   TestState(TR::VirtualMachineOperandStack *stack, TR::VirtualMachineRegister *stackTop)
+      : TR::VirtualMachineState(),
       _stack(stack),
       _stackTop(stackTop)
       {
@@ -77,8 +76,8 @@ class TestState : public OMR::VirtualMachineState
    virtual VirtualMachineState *MakeCopy()
       {
       TestState *newState = new TestState();
-      newState->_stack = (OMR::VirtualMachineOperandStack *)_stack->MakeCopy();
-      newState->_stackTop = (OMR::VirtualMachineRegister *) _stackTop->MakeCopy();
+      newState->_stack = (TR::VirtualMachineOperandStack *)_stack->MakeCopy();
+      newState->_stackTop = (TR::VirtualMachineRegister *) _stackTop->MakeCopy();
       return newState;
       }
 
@@ -89,8 +88,8 @@ class TestState : public OMR::VirtualMachineState
       _stackTop->MergeInto(((TestState *)other)->_stackTop, b);
       }
 
-   OMR::VirtualMachineOperandStack * _stack;
-   OMR::VirtualMachineRegister     * _stackTop;
+   TR::VirtualMachineOperandStack * _stack;
+   TR::VirtualMachineRegister     * _stackTop;
    };
 
 static bool verbose = false;
@@ -567,8 +566,8 @@ OperandStackTestMethod::buildIL()
    Call("createStack", 0);
 
    TR::IlValue *realStackTopAddress = ConstAddress(&_realStackTop);
-   OMR::VirtualMachineRegister *stackTop = new OMR::VirtualMachineRegister(this, "SP", pElementType, sizeof(STACKVALUETYPE), realStackTopAddress);
-   OMR::VirtualMachineOperandStack *stack = new OMR::VirtualMachineOperandStack(this, 1, _valueType, stackTop);
+   TR::VirtualMachineRegister *stackTop = new TR::VirtualMachineRegister(this, "SP", pElementType, sizeof(STACKVALUETYPE), realStackTopAddress);
+   TR::VirtualMachineOperandStack *stack = new TR::VirtualMachineOperandStack(this, 1, _valueType, stackTop);
 
    TestState *vmState = new TestState(stack, stackTop);
    setVMState(vmState);
@@ -583,14 +582,11 @@ OperandStackTestMethod::buildIL()
    return true;
    }
 
-
-
-
 OperandStackTestUsingStructMethod::OperandStackTestUsingStructMethod(TR::TypeDictionary *d)
    : OperandStackTestMethod(d)
    {
    d->DefineStruct("Thread");
-   d->DefineField("Thread", "sp", d->PointerTo(d->PointerTo(STACKVALUEILTYPE)), offsetof(Thread, sp));
+   d->DefineField("Thread", "sp", d->PointerTo(STACKVALUEILTYPE), offsetof(Thread, sp));
    d->CloseStruct("Thread");
 
    DefineParameter("thread", d->PointerTo("Thread"));
@@ -601,8 +597,8 @@ OperandStackTestUsingStructMethod::buildIL()
    {
    Call("createStack", 0);
 
-   OMR::VirtualMachineRegisterInStruct *stackTop = new OMR::VirtualMachineRegisterInStruct(this, "Thread", "thread", "sp", "SP");
-   OMR::VirtualMachineOperandStack *stack = new OMR::VirtualMachineOperandStack(this, 1, _valueType, stackTop);
+   TR::VirtualMachineRegisterInStruct *stackTop = new TR::VirtualMachineRegisterInStruct(this, "Thread", "thread", "sp", "SP");
+   TR::VirtualMachineOperandStack *stack = new TR::VirtualMachineOperandStack(this, 1, _valueType, stackTop);
 
    TestState *vmState = new TestState(stack, stackTop);
    setVMState(vmState);

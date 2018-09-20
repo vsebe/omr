@@ -36,6 +36,7 @@
 #define OMR_GC_POLICY_METRONOME 0x5
 #define OMR_GC_POLICY_OPTAVGPAUSE 0x2
 #define OMR_GC_POLICY_OPTTHRUPUT 0x1
+#define OMR_GC_POLICY_NOGC 0x6
 
 /*
  * list of available GC policies
@@ -46,7 +47,8 @@ typedef enum MM_GCPolicy {
 	gc_policy_optavgpause = OMR_GC_POLICY_OPTAVGPAUSE,
 	gc_policy_gencon = OMR_GC_POLICY_GENCON,
 	gc_policy_balanced = OMR_GC_POLICY_BALANCED,
-	gc_policy_metronome = OMR_GC_POLICY_METRONOME
+	gc_policy_metronome = OMR_GC_POLICY_METRONOME,
+	gc_policy_nogc = OMR_GC_POLICY_NOGC
 } MM_GCPolicy;
 
 #define OMR_GC_WRITE_BARRIER_TYPE_ILLEGAL 0x0
@@ -57,7 +59,9 @@ typedef enum MM_GCPolicy {
 #define OMR_GC_WRITE_BARRIER_TYPE_CARDMARK_INCREMENTAL 0x5
 #define OMR_GC_WRITE_BARRIER_TYPE_CARDMARK_AND_OLDCHECK 0x6
 #define OMR_GC_WRITE_BARRIER_TYPE_REALTIME 0x7
+#define OMR_GC_WRITE_BARRIER_TYPE_SATB 0x7
 #define OMR_GC_WRITE_BARRIER_TYPE_COUNT 0x8
+#define OMR_GC_WRITE_BARRIER_TYPE_SATB_AND_OLDCHECK 0x9
 
 #define OMR_GC_READ_BARRIER_TYPE_ILLEGAL 0x0
 #define OMR_GC_READ_BARRIER_TYPE_NONE 0x1
@@ -73,7 +77,9 @@ typedef enum MM_GCWriteBarrierType {
 	gc_modron_wrtbar_cardmark = OMR_GC_WRITE_BARRIER_TYPE_CARDMARK,
 	gc_modron_wrtbar_cardmark_incremental = OMR_GC_WRITE_BARRIER_TYPE_CARDMARK_INCREMENTAL,
 	gc_modron_wrtbar_cardmark_and_oldcheck = OMR_GC_WRITE_BARRIER_TYPE_CARDMARK_AND_OLDCHECK,
-	gc_modron_wrtbar_realtime = OMR_GC_WRITE_BARRIER_TYPE_REALTIME,
+	gc_modron_wrtbar_satb = OMR_GC_WRITE_BARRIER_TYPE_SATB,
+	gc_modron_wrtbar_satb_and_oldcheck = OMR_GC_WRITE_BARRIER_TYPE_SATB_AND_OLDCHECK,
+	gc_modron_wrtbar_realtime = OMR_GC_WRITE_BARRIER_TYPE_SATB,
 	gc_modron_wrtbar_count = OMR_GC_WRITE_BARRIER_TYPE_COUNT
 } MM_GCWriteBarrierType;
 
@@ -103,6 +109,7 @@ typedef enum MM_MarkingSchemeScanReason {
 #define OMR_GC_CYCLE_TYPE_DEFAULT     0
 #define OMR_GC_CYCLE_TYPE_GLOBAL      1
 #define OMR_GC_CYCLE_TYPE_SCAVENGE    2
+#define OMR_GC_CYCLE_TYPE_EPSILON	 6
 
 /* Core allocation flags defined for OMR are < OMR_GC_ALLOCATE_OBJECT_LANGUAGE_DEFINED_BASE */
 #define OMR_GC_ALLOCATE_OBJECT_NON_INSTRUMENTABLE 0x0
@@ -198,22 +205,22 @@ struct ModronLnrlOptions {
 #if defined(DEBUG)
 #define MMINLINE
 #else /* DEBUG */
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 #define MMINLINE __forceinline
 #elif (__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 1)
 #define MMINLINE inline __attribute((always_inline))
-#else /* WIN32 */
+#else /* OMR_OS_WINDOWS */
 #define MMINLINE inline
-#endif /* WIN32 */
+#endif /* OMR_OS_WINDOWS */
 #endif /* DEBUG */
 
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 #define MMINLINE_DEBUG __forceinline
 #elif ((__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 1))
 #define MMINLINE_DEBUG inline __attribute((always_inline))
-#else /* WIN32 */
+#else /* OMR_OS_WINDOWS */
 #define MMINLINE_DEBUG inline
-#endif /* WIN32 */
+#endif /* OMR_OS_WINDOWS */
 
 /**
  * Lightweight Non-Reentrant Locks (LWNR) Spinlock Support
@@ -507,5 +514,9 @@ typedef enum {
 #define METRONOME_DEFAULT_BEAT_MICRO 3000
 #define METRONOME_DEFAULT_TIME_WINDOW_MICRO 60000
 #endif /* OMR_GC_REALTIME */
+
+#if defined(J9ZTPF)
+#define ZTPF_MEMORY_RESERVE_RATIO .8
+#endif /* defined(J9ZTPF) */
 
 #endif /* OMRGCCONSTS_H_ */

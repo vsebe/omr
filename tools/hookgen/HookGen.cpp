@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015, 2016 IBM Corp. and others
+ * Copyright (c) 2015, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -25,10 +25,10 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 #include <windows.h>
 #define strdup _strdup
-#endif /* WIN32 */
+#endif /* defined(OMR_OS_WINDOWS) */
 
 #include "HookGen.hpp"
 #include "pugixml.hpp"
@@ -335,7 +335,7 @@ char *
 HookGen::getAbsolutePath(const char *filename)
 {
 	char *absolutePath = NULL;
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 	char PATH_SEPARATOR = '\\';
 	char resolved_path[MAX_PATH];
 	DWORD retval = 0;
@@ -352,7 +352,7 @@ HookGen::getAbsolutePath(const char *filename)
 	if (NULL == realpath(filename, resolved_path)) {
 		return absolutePath;
 	}
-#endif /* WIN32 */
+#endif /* defined(OMR_OS_WINDOWS) */
 
 	char *chopped = strrchr(resolved_path, PATH_SEPARATOR);
 	if (NULL != chopped) {
@@ -372,22 +372,21 @@ HookGen::getAbsolutePath(const char *filename)
 FILE *
 HookGen::createFile(char *path, const char *fileName)
 {
-	size_t pathLength = strlen(path);
-	size_t publicFileNameLength = strlen(fileName);
-	char *temp = (char *)malloc(pathLength + publicFileNameLength + 1);
-	if (NULL == temp) {
+	size_t bufferSize = (strlen(path) + strlen(fileName) + 1);
+	char *buff = (char *)malloc(bufferSize);
+	if (NULL == buff) {
 		return NULL;
 	}
-	strncpy(temp, path, pathLength);
-	strncpy(temp + pathLength, fileName, publicFileNameLength);
-	temp[pathLength + publicFileNameLength] = '\0';
 
-	FILE *file = fopen(temp, "wb");
+	strcpy(buff, path);
+	strcat(buff, fileName);
+
+	FILE *file = fopen(buff, "wb");
 #if defined(DEBUG)
 	fprintf(stderr, "Opening %s for writing\n", temp);
 #endif /* DEBUG */
 
-	free(temp);
+	free(buff);
 
 	return file;
 }
@@ -522,19 +521,32 @@ HookGen::processFile()
 void
 HookGen::displayUsage()
 {
-	fprintf(stderr, "hookgen {fileName}\n");
+	fprintf(stderr, "hookgen [-v] fileName\n");
 }
 
 RCType
 HookGen::parseOptions(int argc, char *argv[])
 {
-	if (argc != 2) {
+	for (int i = 1; i < argc; i++) {
+		printf("%d: %s", i, argv[i]);
+		if(0 == strcmp(argv[i], "-v")) {
+			_verbose = true;
+		} else {
+			if (NULL != _fileName) {
+				fprintf(stderr, "Please specify only one filename\n");
+				displayUsage();
+				return RC_FAILED;
+			}
+			_fileName = argv[i];
+		}
+	}
+
+	if (NULL == _fileName) {
 		fprintf(stderr, "Please provide a file to process\n");
 		displayUsage();
 		return RC_FAILED;
 	}
 
-	_fileName = argv[1];
 
 	return RC_OK;
 }
@@ -565,7 +577,9 @@ startHookGen(int argc, char *argv[])
 		goto finish;
 	}
 
-	fprintf(stderr, "Processed %s to create public header %s and private header %s\n", hookGen.getFileName(), hookGen.getPublicFileName(), hookGen.getPrivateFileName());
+	if(hookGen.isVerbose()) {
+		fprintf(stderr, "Processed %s to create public header %s and private header %s\n", hookGen.getFileName(), hookGen.getPublicFileName(), hookGen.getPrivateFileName());
+	}
 
 finish:
 	hookGen.tearDown();

@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2017, 2017 IBM Corp. and others
+# Copyright (c) 2017, 2018 IBM Corp. and others
 #
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -27,7 +27,6 @@ add_subdirectory(util)
 
 add_subdirectory(omrGtestGlue)
 add_subdirectory(algotest)
-add_subdirectory(gctest)
 add_subdirectory(porttest)
 add_subdirectory(rastest)
 add_subdirectory(sigtest)
@@ -36,7 +35,11 @@ add_subdirectory(threadtest)
 add_subdirectory(utiltest)
 add_subdirectory(vmtest)
 
-if (OMR_JITBUILDER)
+if(OMR_GC)
+	add_subdirectory(gctest)
+endif()
+
+if(OMR_JITBUILDER_TEST)
 	add_subdirectory(jitbuildertest)
 endif()
 
@@ -44,7 +47,7 @@ if(OMR_TEST_COMPILER)
 	add_subdirectory(compilertest)
 endif()
 
-if(OMR_JITBUILDER)
+if(OMR_JITBUILDER_TEST)
 	add_subdirectory(tril)
 	add_subdirectory(compilertriltest)
 endif()

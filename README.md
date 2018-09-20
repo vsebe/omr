@@ -10,7 +10,7 @@ is available at https://www.apache.org/licenses/LICENSE-2.0.
 This Source Code may also be made available under the following
 Secondary Licenses when the conditions for such availability set
 forth in the Eclipse Public License, v. 2.0 are satisfied: GNU
-General Public License, version 2 with the GNU Classpath 
+General Public License, version 2 with the GNU Classpath
 Exception [1] and GNU General Public License, version 2 with the
 OpenJDK Assembly Exception [2].
 
@@ -20,11 +20,23 @@ OpenJDK Assembly Exception [2].
 SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
 -->
 
-[![Travis Status](https://api.travis-ci.org/eclipse/omr.svg?branch=master)](https://travis-ci.org/eclipse/omr)
-[![Appveyor Status](https://ci.appveyor.com/api/projects/status/github/eclipse/omr?svg=true&branch=master)](https://ci.appveyor.com/project/eclipsewebmaster/omr)
-[![Build-linux_390-64 Status](https://ci.eclipse.org/omr/job/Build-linux_390-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-linux_390-64/)
-[![Build-linux_ppc-64_le_gcc Status](https://ci.eclipse.org/omr/job/Build-linux_ppc-64_le_gcc/badge/icon)](https://ci.eclipse.org/omr/job/Build-linux_ppc-64_le_gcc/)
-[![Build-aix_ppc-64 Status](https://ci.eclipse.org/omr/job/Build-aix_ppc-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-aix_ppc-64/)
+# Eclipse OMR
+
+| Build | Status |
+| ---------------------- | -------------------- |
+| **Travis CI (Overall)** | [![Travis Overall Status](https://api.travis-ci.org/eclipse/omr.svg?branch=master)](https://travis-ci.org/eclipse/omr) |
+| **Windows x86(Appveyor)** | [![Appveyor Status](https://ci.appveyor.com/api/projects/status/github/eclipse/omr?svg=true&branch=master)](https://ci.appveyor.com/project/eclipsewebmaster/omr) |
+| **Windows x86-64 (Jenkins)** | [![Windows x86-64 Status](https://ci.eclipse.org/omr/job/Build-win_x86-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-win_x86-64/) |
+| **Linux x86-64 (Jenkins)** | [![Linux x86-64 Status](https://ci.eclipse.org/omr/job/Build-linux_x86-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-linux_x86-64/) |
+| **Linux x86-64 CMAKE Makefile (Travis)** | [![Travis Linux x86-64 CMAKE Makefile Status](https://travis-matrix-badges.herokuapp.com/repos/eclipse/omr/branches/master/1)](https://travis-ci.org/eclipse/omr) |
+| **Linux x86-64 (Travis)** | [![Travis Linux x86-64 Status](https://travis-matrix-badges.herokuapp.com/repos/eclipse/omr/branches/master/2)](https://travis-ci.org/eclipse/omr) |
+| **Linux x86-64 LINT (Travis)** | [![Travis Linux x86-64 LINT Status](https://travis-matrix-badges.herokuapp.com/repos/eclipse/omr/branches/master/5)](https://travis-ci.org/eclipse/omr) |
+| **Linux x86-64 CMAKE Ninja (Travis)** | [![Travis Linux x86-64 CMAKE Ninja Status](https://travis-matrix-badges.herokuapp.com/repos/eclipse/omr/branches/master/6)](https://travis-ci.org/eclipse/omr) |
+| **Linux AArch64 (Travis)** | [![Travis Linux AArch64 Status](https://travis-matrix-badges.herokuapp.com/repos/eclipse/omr/branches/master/3)](https://travis-ci.org/eclipse/omr) |
+| **Linux ARM (Travis)** | [![Travis Linux ARM Status](https://travis-matrix-badges.herokuapp.com/repos/eclipse/omr/branches/master/4)](https://travis-ci.org/eclipse/omr) |
+| **Power 64-bit Linux (Jenkins)** | [![Build-linux_ppc-64_le_gcc Status](https://ci.eclipse.org/omr/job/Build-linux_ppc-64_le_gcc/badge/icon)](https://ci.eclipse.org/omr/job/Build-linux_ppc-64_le_gcc/) |
+| **Power 64-bit AIX (Jenkins)** | [![Build-aix_ppc-64 Status](https://ci.eclipse.org/omr/job/Build-aix_ppc-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-aix_ppc-64/) |
+| **Linux on Z 64-bit (Jenkins)** | [![Build-linux_390-64 Status](https://ci.eclipse.org/omr/job/Build-linux_390-64/badge/icon)](https://ci.eclipse.org/omr/job/Build-linux_390-64/) |
 
 What Is Eclipse OMR?
 ====================
@@ -78,8 +90,8 @@ Who is using Eclipse OMR?
 * The most comprehensive consumer of the Eclipse OMR technology is the [Eclipse
   OpenJ9 Virtual Machine](https://github.com/eclipse/openj9): a high
   performance, scalable, enterprise class Java Virtual Machine implementation
-  representing hundreds of person years of effort, built on top of the core 
-  technologies provided by Eclipse OMR. 
+  representing hundreds of person years of effort, built on top of the core
+  technologies provided by Eclipse OMR.
 * The Ruby+OMR Technology Preview has used Eclipse OMR components to add a JIT
   compiler to the CRuby implementation, and to experiment with replacing the
   garbage collector in CRuby.
@@ -117,6 +129,20 @@ There are some active contribution projects underway right now:
 
 [beg]: https://github.com/eclipse/omr/issues?q=is%3Aopen+is%3Aissue+label%3Abeginner
 
+
+How Do I Interact With the Community?
+=====================================
+
+* Join the Eclipse OMR developer community [mailing list](https://accounts.eclipse.org/mailing-list/omr-dev).
+The community typically uses this list for project announcements and administrative
+discussions amongst committers.  Questions are welcome here as well.
+
+* Join the Eclipse OMR community [Slack workspace](https://join.slack.com/t/eclipse-omr/shared_invite/enQtMzg2ODIwODc4MTAyLTk4ZjJjNTZlZmMyMGRmYTczOTkzMGJiNTQ4NTA3YTA1NGU4MmJjNWI4NTBjOGNkNmNjMWQ3MmFmYjA4OGZjZjM).  You can join channels
+that interest you, ask questions, and receive answers from subject matter experts.
+
+* Ask a question or start a discussion via a [GitHub issue](https://github.com/eclipse/omr/issues).
+
+
 How Do I Use it?
 ================
 
@@ -124,7 +150,7 @@ How Do I Use it?
 
 The best way to get an initial understanding of the Eclipse OMR technology is to
 look at a 'standalone' build, which hooks Eclipse OMR up to the its testing system
-only. 
+only.
 
 ### Basic configuration and compile
 To build standalone Eclipse OMR, run the following commands from the top of the
@@ -206,4 +232,4 @@ Blog Posts about OMR technologies
 * [Introducing Eclipse OMR: Building Language Runtimes](https://developer.ibm.com/open/2016/03/08/introducing-omr-building-language-runtimes/)
 * [JitBuilder Library and Eclipse OMR: Just-In-Time Compilers made easy](https://developer.ibm.com/open/2016/07/19/jitbuilder-library-and-eclipse-omr-just-in-time-compilers-made-easy/)
 
-(c) Copyright IBM Corp. 2016, 2017
+(c) Copyright IBM Corp. 2016, 2018

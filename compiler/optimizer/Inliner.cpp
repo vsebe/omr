@@ -488,14 +488,6 @@ TR_InlinerBase::cleanup(TR::ResolvedMethodSymbol * callerSymbol, bool inlinedSit
 
    }
 
-//check if the interface implementation we found meet certain requirements
-bool
-OMR_InlinerUtil::validateInterfaceImplementation(TR_ResolvedMethod *interfaceMethod)
-   {
-   return true;
-   }
-
-
 bool
 OMR_InlinerPolicy::mustBeInlinedEvenInDebug(TR_ResolvedMethod * calleeMethod, TR::TreeTop *callNodeTreeTop)
    {
@@ -1532,7 +1524,8 @@ TR_InlinerBase::createVirtualGuard(
    if (guard->_kind == TR_MutableCallSiteTargetGuard)
       {
       TR::KnownObjectTable *knot = comp()->getOrCreateKnownObjectTable();
-      heuristicTrace(tracer(),"  createVirtualGuard: MutableCallSite.epoch is %p.obj%d (%p.%p)", guard->_mutableCallSiteObject, guard->_mutableCallSiteEpoch, *guard->_mutableCallSiteObject, *knot->getPointerLocation(guard->_mutableCallSiteEpoch));
+      if (knot)
+         heuristicTrace(tracer(),"  createVirtualGuard: MutableCallSite.epoch is %p.obj%d (%p.%p)", guard->_mutableCallSiteObject, guard->_mutableCallSiteEpoch, *guard->_mutableCallSiteObject, *knot->getPointerLocation(guard->_mutableCallSiteEpoch));
       return TR_VirtualGuard::createMutableCallSiteTargetGuard(comp(), calleeIndex, callNode, destination, guard->_mutableCallSiteObject, guard->_mutableCallSiteEpoch);
       }
 
@@ -3329,7 +3322,7 @@ TR::TreeTop * OMR_InlinerUtil::storeValueInATemp(
              value->getSymbolReference()->getSymbol()->castToAutoSymbol()->isInternalPointer()))
          isInternalPointer = true;
 
-      if ((value->isNotCollected() && dataType != TR::Aggregate) || isIndirect)
+      if ((value->isNotCollected() && dataType == TR::Address) || isIndirect)
          {
          TR::SymbolReference *valueRef;
          if (tempSymRef!=NULL)

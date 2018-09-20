@@ -628,6 +628,7 @@ objext
 arlibext
 solibext
 exeext
+DIASDK_HOME
 enable_DDR
 enable_tracegen
 enable_fvtest_agent
@@ -658,10 +659,13 @@ CCLINK
 OMR_CROSS_COMPILE
 OMR_VALGRIND_MEMCHECK
 OMR_GC_IDLE_HEAP_MANAGER
+VS_CL_PATH
+OMR_DIASDK_HOME
 OMRTHREAD_LIB_UNIX
 OMRTHREAD_LIB_ZOS
 OMRTHREAD_LIB_WIN32
 OMRTHREAD_LIB_AIX
+OMRPORT_OMRSIG_SUPPORT
 OMR_PORT_ZOS_CEEHDLRSUPPORT
 OMR_PORT_ALLOCATE_TOP_DOWN
 OMR_OPT_CUDA
@@ -683,6 +687,7 @@ OMR_GC_COMPRESSED_POINTERS
 OMR_ENV_DATA64
 OMR_ARCH_S390
 OMR_ARCH_X86
+OMR_ARCH_AARCH64
 OMR_ARCH_ARM
 OMR_ARCH_POWER
 OMR_PORT_ASYNC_HANDLER
@@ -744,6 +749,8 @@ OMR_PRODUCT_DESCRIPTION
 OMR_COMPANY_COPYRIGHT
 OMR_COMPANY_NAME
 OMR_CROSS_CONFIGURE
+OMR_TOOLS_CXX
+OMR_TOOLS_CC
 OMR_TOOLCHAIN
 OMR_TARGET_DATASIZE
 OMR_HOST_ARCH
@@ -858,6 +865,7 @@ enable_OMR_GC_VLHGC
 enable_OMR_PORT_ASYNC_HANDLER
 enable_OMR_ARCH_POWER
 enable_OMR_ARCH_ARM
+enable_OMR_ARCH_AARCH64
 enable_OMR_ARCH_X86
 enable_OMR_ARCH_S390
 enable_OMR_ENV_DATA64
@@ -879,6 +887,7 @@ enable_OMR_PORT_NUMA_SUPPORT
 enable_OMR_OPT_CUDA
 enable_OMR_PORT_ALLOCATE_TOP_DOWN
 enable_OMR_PORT_ZOS_CEEHDLRSUPPORT
+enable_OMRPORT_OMRSIG_SUPPORT
 enable_OMRTHREAD_LIB_AIX
 enable_OMRTHREAD_LIB_WIN32
 enable_OMRTHREAD_LIB_ZOS
@@ -901,6 +910,8 @@ OMR_HOST_OS
 OMR_HOST_ARCH
 OMR_TARGET_DATASIZE
 OMR_TOOLCHAIN
+OMR_TOOLS_CC
+OMR_TOOLS_CXX
 OMR_CROSS_CONFIGURE
 OMR_COMPANY_NAME
 OMR_COMPANY_COPYRIGHT
@@ -914,7 +925,8 @@ CPPFLAGS
 CPP
 CXX
 CXXFLAGS
-CCC'
+CCC
+OMR_DIASDK_HOME'
 
 
 # Initialize some variables set by options.
@@ -1623,6 +1635,8 @@ Optional Features:
 
   --enable-OMR_ARCH_POWER
   --enable-OMR_ARCH_ARM
+  --enable-OMR_ARCH_AARCH64
+
   --enable-OMR_ARCH_X86
   --enable-OMR_ARCH_S390
   --enable-OMR_ENV_DATA64
@@ -1659,6 +1673,8 @@ Optional Features:
   --enable-OMR_PORT_ALLOCATE_TOP_DOWN
 
   --enable-OMR_PORT_ZOS_CEEHDLRSUPPORT
+
+  --enable-OMRPORT_OMRSIG_SUPPORT
 
   --enable-OMRTHREAD_LIB_AIX
 
@@ -1697,12 +1713,17 @@ Some influential environment variables:
               aix,linux,osx,win,zos
   OMR_HOST_ARCH
               The architecture of the CPU where the package will run. One of:
-              arm,ppc,s390,x86
+              aarch64,arm,ppc,s390,x86
   OMR_TARGET_DATASIZE
               Specifies whether the package will run in 32- or 64-bit mode.
               One of: 31,32,64
   OMR_TOOLCHAIN
               The toolchain used to build the package. One of: gcc,xlc,msvc
+  OMR_TOOLS_CC
+              The C compiler to use for building tools (can differ from CC).
+  OMR_TOOLS_CXX
+              The C++ compiler to use for building tools (can differ from
+              CXX).
   OMR_CROSS_CONFIGURE
               Indicates that configure is not being run on a system that is
               capable of building the package. Compiler and feature detection
@@ -1726,6 +1747,8 @@ Some influential environment variables:
   CPP         C preprocessor
   CXX         C++ compiler command
   CXXFLAGS    C++ compiler flags
+  OMR_DIASDK_HOME
+              The directory where the DIA SDK can be found. (Default: )
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -2663,7 +2686,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 ###############################################################################
-# Copyright (c) 2015, 2016 IBM Corp. and others
+# Copyright (c) 2015, 2018 IBM Corp. and others
 #
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -2826,6 +2849,8 @@ case $host_os in *\ *) host_os=`echo "$host_os" | sed 's/ /-/g'`;; esac
 
 
 
+
+
 OMR_COMPANY_NAME=${OMR_COMPANY_NAME:-""}
 OMR_COMPANY_COPYRIGHT=${OMR_COMPANY_COPYRIGHT:-""}
 OMR_PRODUCT_DESCRIPTION=${OMR_PRODUCT_DESCRIPTION:-"OMR 0.1 "}
@@ -2926,7 +2951,6 @@ else
 fi
 
 
-
 ###
 ### Build environment configuration
 ###
@@ -2986,6 +3010,8 @@ if test "x$OMR_HOST_ARCH" = "x"; then :
   case $host_cpu in #(
   *arm*) :
     OMR_HOST_ARCH=arm ;; #(
+  aarch64) :
+    OMR_HOST_ARCH=aarch64 ;; #(
   powerpc*) :
     OMR_HOST_ARCH=ppc ;; #(
   i370) :
@@ -3022,22 +3048,14 @@ else
   OMR_CROSS_COMPILE=0
 fi
 
-if test "$OMR_CROSS_CONFIGURE" = "yes"; then :
-  # If we are cross-configuring, clear CC so that the default platform compiler can be detected.
-# Warn that compiler and feature detection tests will be invalid.
-# The user must configure all options manually.
-  { CC=; unset CC;}
-	$as_echo "## ------------------------------------------------------- ##"
-	$as_echo "## WARNING                                                 ##"
-	$as_echo "## The current machine cannot compile the target platform. ##"
-	$as_echo "## Compiler and feature detection tests will not be valid. ##"
-	$as_echo "## ------------------------------------------------------- ##"
-
-fi
-
-# If OMR_TARGET_DATASIZE is set, validate it and use it.
-# Otherwise, detect it with a compiler test.
-ac_ext=c
+# If not cross-configuring and OMR_TARGET_DATASIZE is not set,
+# detect it with a compiler test and validate it, otherwise
+# just validate it.
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking OMR_TARGET_DATASIZE" >&5
+$as_echo_n "checking OMR_TARGET_DATASIZE... " >&6; }
+if test "x$OMR_CROSS_CONFIGURE" != "xyes"
+then
+	ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
@@ -4225,7 +4243,8 @@ done
 
 
 if test "x$OMR_TARGET_DATASIZE" = "x"; then :
-  # The cast to long int works around a bug in the HP C Compiler
+
+		# The cast to long int works around a bug in the HP C Compiler
 # version HP92453-01 B.11.11.23709.GP, which incorrectly rejects
 # declarations like `int a3[[(sizeof (unsigned char)) >= 0]];'.
 # This bug is HP SR number 8606223364.
@@ -4258,12 +4277,16 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
+		if test "$ac_cv_sizeof_void_p" = 8; then :
+  OMR_TARGET_DATASIZE=64
+else
+  OMR_TARGET_DATASIZE=32
 fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking OMR_TARGET_DATASIZE" >&5
-$as_echo_n "checking OMR_TARGET_DATASIZE... " >&6; }
-if test "x$OMR_TARGET_DATASIZE" != "x"; then :
-  case $OMR_TARGET_DATASIZE in #(
+
+fi
+fi
+case $OMR_TARGET_DATASIZE in #(
   31) :
      ;; #(
   32) :
@@ -4272,23 +4295,16 @@ if test "x$OMR_TARGET_DATASIZE" != "x"; then :
      ;; #(
   *) :
     as_fn_error $? "An invalid value was provided for OMR_TARGET_DATASIZE: $OMR_TARGET_DATASIZE" "$LINENO" 5
-	 ;;
+ ;;
 esac
-else
-  if test "$ac_cv_sizeof_void_p" = 8; then :
-  OMR_TARGET_DATASIZE=64
-else
-  OMR_TARGET_DATASIZE=32
-
-fi
-
-fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $OMR_TARGET_DATASIZE" >&5
 $as_echo "$OMR_TARGET_DATASIZE" >&6; }
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking OMR_TOOLCHAIN" >&5
 $as_echo_n "checking OMR_TOOLCHAIN... " >&6; }
-if test "x$OMR_TOOLCHAIN" = "x"; then :
+if test "x$OMR_CROSS_CONFIGURE" != "xyes"
+then
+	if test "x$OMR_TOOLCHAIN" = "x"; then :
   ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -4344,6 +4360,7 @@ fi
 fi
 
 fi
+fi
 case $OMR_TOOLCHAIN in #(
   gcc) :
      ;; #(
@@ -4360,7 +4377,6 @@ $as_echo "$OMR_TOOLCHAIN" >&6; }
 
 # Default OMRGLUE to example/glue if it was not specified
 OMRGLUE=${OMRGLUE:-"./example/glue"}
-
 
 ## Default Variables
 
@@ -6144,6 +6160,25 @@ else
 fi
 
 
+# Check whether --enable-OMR_ARCH_AARCH64 was given.
+if test "${enable_OMR_ARCH_AARCH64+set}" = set; then :
+  enableval=$enable_OMR_ARCH_AARCH64; if test "x${enableval}" = xyes; then :
+  OMR_ARCH_AARCH64=1
+
+   $as_echo "#define OMR_ARCH_AARCH64 1" >>confdefs.h
+
+else
+  OMR_ARCH_AARCH64=0
+
+
+fi
+else
+  OMR_ARCH_AARCH64=0
+
+
+fi
+
+
 # Check whether --enable-OMR_ARCH_X86 was given.
 if test "${enable_OMR_ARCH_X86+set}" = set; then :
   enableval=$enable_OMR_ARCH_X86; if test "x${enableval}" = xyes; then :
@@ -6462,6 +6497,7 @@ else
 fi
 
 
+
 # Check whether --enable-OMR_ENV_LITTLE_ENDIAN was given.
 if test "${enable_OMR_ENV_LITTLE_ENDIAN+set}" = set; then :
   enableval=$enable_OMR_ENV_LITTLE_ENDIAN; if test "x${enableval}" = xyes; then :
@@ -6477,7 +6513,10 @@ else
   if test "x${enable_auto_build_flag}" = xyes; then :
   if test "3" -gt 2; then :
 
-					 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether byte ordering is bigendian" >&5
+
+	if test "x$OMR_CROSS_CONFIGURE" != "xyes"
+	then
+	 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether byte ordering is bigendian" >&5
 $as_echo_n "checking whether byte ordering is bigendian... " >&6; }
 if ${ac_cv_c_bigendian+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -6697,12 +6736,13 @@ $as_echo "$ac_cv_c_bigendian" >&6; }
    universal)
      OMR_ENV_LITTLE_ENDIAN=0
 
-
      ;; #(
    *)
      as_fn_error $? "unknown endianness
  presetting ac_cv_c_bigendian=no (or yes) will help" "$LINENO" 5 ;;
  esac
+
+	fi
 
 
 					:
@@ -6820,6 +6860,14 @@ else
   if test "3" -gt 2; then :
 
 
+	if test "x$OMR_CROSS_CONFIGURE" != "xyes"
+	then
+	# The no-op ":" prevents this if-then from being left empty
+	# if AC_CHECK_HEADERS_ONCE has already been evaluated.
+	:
+
+	fi
+
 
 					:
 
@@ -6838,8 +6886,12 @@ fi
 
 
 
-if test "$OMR_CROSS_CONFIGURE" != yes && test "$OMR_PORT_NUMA_SUPPORT" = 1 && test "$OMR_HOST_OS" = linux; then :
+if test "x$OMR_CROSS_CONFIGURE" != "xyes"
+then
+	if test "$OMR_PORT_NUMA_SUPPORT" = 1 -a "$OMR_HOST_OS" = linux; then :
 
+
+fi
 fi
 
 # Check whether --enable-OMR_OPT_CUDA was given.
@@ -6894,6 +6946,25 @@ else
 fi
 else
   OMR_PORT_ZOS_CEEHDLRSUPPORT=0
+
+
+fi
+
+
+# Check whether --enable-OMRPORT_OMRSIG_SUPPORT was given.
+if test "${enable_OMRPORT_OMRSIG_SUPPORT+set}" = set; then :
+  enableval=$enable_OMRPORT_OMRSIG_SUPPORT; if test "x${enableval}" = xyes; then :
+  OMRPORT_OMRSIG_SUPPORT=1
+
+   $as_echo "#define OMRPORT_OMRSIG_SUPPORT 1" >>confdefs.h
+
+else
+  OMRPORT_OMRSIG_SUPPORT=0
+
+
+fi
+else
+  OMRPORT_OMRSIG_SUPPORT=0
 
 
 fi
@@ -7069,10 +7140,123 @@ fi
 
 
 
-if test "x$enable_DDR" = "xyes" && test "$cross_compiling" != "yes" && test "$OMR_HOST_OS" != osx && test "$OMR_HOST_OS" != aix; then :
 
-	# Look for libdwarf
-	for ac_header in dwarf.h libdwarf/dwarf.h libdwarf.h libdwarf/libdwarf.h
+
+if test "$enable_DDR" = yes -a "$cross_compiling" != "yes"; then :
+  case $OMR_HOST_OS in #(
+  aix) :
+     ;; #(
+  osx) :
+     ;; #(
+  win) :
+
+			# a user-supplied path wins
+			DIASDK_HOME="$OMR_DIASDK_HOME"
+			# otherwise if VSINSTALLDIR is set, use the DIA SDK found there
+			if test "x$DIASDK_HOME" = "x" -a "x$VSINSTALLDIR" != "x"; then :
+  DIASDK_HOME="$VSINSTALLDIR/DIA SDK"
+
+fi
+			# next, look relative to the location of the Visual Studio compiler
+			if test "x$DIASDK_HOME" = "x" -a "$OMR_TOOLCHAIN" = msvc; then :
+
+				# Extract the first word of "cl.exe", so it can be a program name with args.
+set dummy cl.exe; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_path_VS_CL_PATH+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  case $VS_CL_PATH in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_VS_CL_PATH="$VS_CL_PATH" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_VS_CL_PATH="$as_dir/$ac_word$ac_exec_ext"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  ;;
+esac
+fi
+VS_CL_PATH=$ac_cv_path_VS_CL_PATH
+if test -n "$VS_CL_PATH"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $VS_CL_PATH" >&5
+$as_echo "$VS_CL_PATH" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+				if test "x$VS_CL_PATH" != x; then :
+
+					# this should yield .../VC/bin/cl.exe or .../VC/bin/amd64/cl.exe
+					vc_bin_dir=$($as_dirname -- "$VS_CL_PATH" ||
+$as_expr X"$VS_CL_PATH" : 'X\(.*[^/]\)//*[^/][^/]*/*$' \| \
+	 X"$VS_CL_PATH" : 'X\(//\)[^/]' \| \
+	 X"$VS_CL_PATH" : 'X\(//\)$' \| \
+	 X"$VS_CL_PATH" : 'X\(/\)' \| . 2>/dev/null ||
+$as_echo X"$VS_CL_PATH" |
+    sed '/^X\(.*[^/]\)\/\/*[^/][^/]*\/*$/{
+	    s//\1/
+	    q
+	  }
+	  /^X\(\/\/\)[^/].*/{
+	    s//\1/
+	    q
+	  }
+	  /^X\(\/\/\)$/{
+	    s//\1/
+	    q
+	  }
+	  /^X\(\/\).*/{
+	    s//\1/
+	    q
+	  }
+	  s/.*/./; q')
+					diasdk_dir1="$vc_bin_dir/../../DIA SDK"
+					diasdk_dir2="$vc_bin_dir/../../../DIA SDK"
+					diasdk_dir3="$vc_bin_dir/../../../../../../../DIA SDK"
+					if test -f "$diasdk_dir1/include/dia2.h"; then :
+  DIASDK_HOME="$(cygpath -a -w "$diasdk_dir1")"
+elif test -f "$diasdk_dir2/include/dia2.h"; then :
+  DIASDK_HOME="$(cygpath -a -w "$diasdk_dir2")"
+elif test -f "$diasdk_dir3/include/dia2.h"; then :
+  DIASDK_HOME="$(cygpath -a -w "$diasdk_dir3")"
+
+fi
+
+
+fi
+
+
+fi
+			# fail if none of the above
+			if test "x$DIASDK_HOME" = "x"; then :
+  as_fn_error $? "--enable-DDR requires the DIA SDK; set VSINSTALLDIR or OMR_DIASDK_HOME" "$LINENO" 5
+
+fi
+			# use forward slashes instead of backslashes; remove any duplicate slashes
+			DIASDK_HOME=$(echo "$DIASDK_HOME" | sed -e 's:\\:/:g' -e 's://:/:'g)
+		 ;; #(
+  *) :
+
+			# other host types: look for DWARF support
+			if test "x$OMR_CROSS_CONFIGURE" != "xyes"
+			then
+				for ac_header in dwarf.h libdwarf/dwarf.h libdwarf.h libdwarf/libdwarf.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
@@ -7085,8 +7269,7 @@ fi
 
 done
 
-
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dwarf_init" >&5
+				{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dwarf_init" >&5
 $as_echo_n "checking for library containing dwarf_init... " >&6; }
 if ${ac_cv_search_dwarf_init+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -7142,7 +7325,7 @@ if test "$ac_res" != no; then :
 
 fi
 
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dwarf_init" >&5
+				{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dwarf_init" >&5
 $as_echo_n "checking for library containing dwarf_init... " >&6; }
 if ${ac_cv_search_dwarf_init+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -7198,7 +7381,7 @@ if test "$ac_res" != no; then :
 
 fi
 
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing elf_begin" >&5
+				{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing elf_begin" >&5
 $as_echo_n "checking for library containing elf_begin... " >&6; }
 if ${ac_cv_search_elf_begin+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -7254,7 +7437,18 @@ if test "$ac_res" != no; then :
 
 fi
 
+			else
+				# Can't run AC_CHECK_HEADERS when cross-configuring.
+				# If DDR is enabled set these flags and hope for the best,
+				# otherwise the build will fail even if the headers are available.
+				$as_echo "#define HAVE_DWARF_H 1" >>confdefs.h
 
+				$as_echo "#define HAVE_LIBDWARF_H 1" >>confdefs.h
+
+			fi
+
+	 ;;
+esac
 
 fi
 
@@ -7310,6 +7504,7 @@ if test "x$HOST_CC" = "x"; then :
 fi
 
 CC=$BUILD_CC
+
 
 
 
@@ -8144,7 +8339,7 @@ cat >>$CONFIG_STATUS <<_ACEOF || ac_write_fail=1
 # INIT-COMMANDS
 #
 if test "$cross_compiling" = "yes"; then :
-  OMR_HOSTCONFIG_ENV="CC= CXX="
+  OMR_HOSTCONFIG_ENV="CC=$OMR_TOOLS_CC CXX=$OMR_TOOLS_CXX"
 fi
 
 _ACEOF
@@ -8787,5 +8982,4 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
-
 

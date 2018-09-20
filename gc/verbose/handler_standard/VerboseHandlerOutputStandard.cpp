@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2016 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,6 +19,8 @@
  *
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
+
+#include "omrcfg.h"
 
 #include "omrgcconsts.h"
 #include "gcutils.h"
@@ -232,6 +234,9 @@ MM_VerboseHandlerOutputStandard::getCycleType(uintptr_t type)
 		break;
 	case OMR_GC_CYCLE_TYPE_SCAVENGE:
 		cycleType = "scavenge";
+		break;
+	case OMR_GC_CYCLE_TYPE_EPSILON:
+		cycleType = "epsilon";
 		break;
 	default:
 		cycleType = "unknown";

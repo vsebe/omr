@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2017, 2017 IBM Corp. and others
+# Copyright (c) 2017, 2018 IBM Corp. and others
 #
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,15 +19,36 @@
 # SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
 ###############################################################################
 
-add_executable(example
-	main.cpp
+include(OmrAssert)
+
+omr_assert(TEST OMR_EXAMPLE)
+
+add_library(omr_example_base INTERFACE)
+
+target_include_directories(omr_example_base
+	INTERFACE
+		glue
 )
 
-target_link_libraries(example
-	PRIVATE
-	omrgc
-)
+# The GC example shows how to use OMR's GC component
+if(OMR_GC)
+	add_executable(gcexample
+		gcmain.cpp
+	)
 
-add_test(example example)
+	target_link_libraries(gcexample
+		omr_main_function
+		pugixml
+		omrcore
+		omrvmstartup
+		${OMR_GC_LIB}
+		${OMR_PORT_LIB}
+	)
+
+	# TODO: The example is currently broken.
+	# Hashtable iteration appears to be broken, which in turn breaks root
+	# marking, and causes the example to spin forever.
+	# add_test(gcexample gcexample)
+endif(OMR_GC)
 
 add_subdirectory(glue)

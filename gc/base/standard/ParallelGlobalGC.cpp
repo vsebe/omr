@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -218,6 +218,11 @@ MM_ParallelGlobalGC::initialize(MM_EnvironmentBase *env)
 {
 	J9HookInterface** mmPrivateHooks = J9_HOOK_INTERFACE(_extensions->privateHookInterface);
 
+	if (gc_policy_nogc == env->getExtensions()->configurationOptions._gcPolicy) {
+		_cycleType = OMR_GC_CYCLE_TYPE_EPSILON;
+		_disableGC = true;
+	}
+
 	_markingScheme = MM_MarkingScheme::newInstance(env);
 	if (NULL == _markingScheme) {
 		goto error_no_memory;
@@ -318,7 +323,7 @@ MM_ParallelGlobalGC::tearDown(MM_EnvironmentBase *env)
 uintptr_t
 MM_ParallelGlobalGC::getVMStateID()
 {
-	return J9VMSTATE_GC_COLLECTOR_GLOBALGC;
+	return OMRVMSTATE_GC_COLLECTOR_GLOBALGC;
 }
 
 /****************************************
@@ -1081,8 +1086,13 @@ MM_ParallelGlobalGC::internalGarbageCollect(MM_EnvironmentBase *env, MM_MemorySu
 {
 	_extensions->globalGCStats.gcCount += 1;
 
-	masterThreadGarbageCollect(env, allocDescription, true, false);
-	
+	/* only try to expand heap instead of garbage collection in -Xgcpolicy:nogc */
+	if (_disableGC) {
+		env->_cycleState->_activeSubSpace->checkResize(env, allocDescription, false);
+		env->_cycleState->_activeSubSpace->performResize(env, allocDescription);
+	} else {
+		masterThreadGarbageCollect(env, allocDescription, true, false);
+	}
 	return true;
 }
 

@@ -74,6 +74,13 @@ public:
 protected:
 	virtual bool initialize(MM_EnvironmentBase* env);
 	virtual MM_EnvironmentBase* allocateNewEnvironment(MM_GCExtensionsBase* extensions, OMR_VMThread* omrVMThread);
+	
+	/**
+	 * Sets the number of gc threads
+	 *
+	 * @param env[in] - the current environment
+	 */
+	virtual void initializeGCThreadCount(MM_EnvironmentBase* env);
 
 private:
 	static MM_GCWriteBarrierType getWriteBarrierType(MM_EnvironmentBase* env)
@@ -82,12 +89,20 @@ private:
 		MM_GCExtensionsBase* extensions = env->getExtensions();
 		if (extensions->isScavengerEnabled()) {
 			if (extensions->isConcurrentMarkEnabled()) {
-				writeBarrierType = gc_modron_wrtbar_cardmark_and_oldcheck;
+				if (extensions->configurationOptions._forceOptionWriteBarrierSATB) {
+					writeBarrierType = gc_modron_wrtbar_satb_and_oldcheck;
+				} else {
+					writeBarrierType = gc_modron_wrtbar_cardmark_and_oldcheck;
+				}
 			} else {
 				writeBarrierType = gc_modron_wrtbar_oldcheck;
 			}
 		} else if (extensions->isConcurrentMarkEnabled()) {
-			writeBarrierType = gc_modron_wrtbar_cardmark;
+			if (extensions->configurationOptions._forceOptionWriteBarrierSATB) {
+				writeBarrierType = gc_modron_wrtbar_satb;
+			} else {
+				writeBarrierType = gc_modron_wrtbar_cardmark;
+			}
 		}
 		return writeBarrierType;
 	}

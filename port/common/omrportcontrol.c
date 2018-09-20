@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2015 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -104,14 +104,14 @@ omrport_control(struct OMRPortLibrary *portLibrary, const char *key, uintptr_t v
 		return 0;
 	}
 
-#if defined (WIN32) && !defined(J9HAMMER)
+#if defined(OMR_OS_WINDOWS) && !defined(OMR_ENV_DATA64)
 	if (!strcmp("SIG_INTERNAL_HANDLER", key)) {
 		/* used by optimized code to implement fast signal handling on Windows */
 		extern int structuredExceptionHandler(struct OMRPortLibrary *portLibrary, omrsig_handler_fn handler, void *handler_arg, uint32_t flags, EXCEPTION_POINTERS *exceptionInfo);
 		*(int (**)(struct OMRPortLibrary *, omrsig_handler_fn, void *, uint32_t, EXCEPTION_POINTERS *))value = structuredExceptionHandler;
 		return 0;
 	}
-#endif
+#endif /* defined(OMR_OS_WINDOWS) && !defined(OMR_ENV_DATA64) */
 
 #if defined(OMR_PORT_ZOS_CEEHDLRSUPPORT)
 	if (!strcmp("SIG_INTERNAL_HANDLER", key)) {
@@ -150,6 +150,14 @@ omrport_control(struct OMRPortLibrary *portLibrary, const char *key, uintptr_t v
 
 
 	/* enable or disable NUMA memory interleave */
+	if (0 == strcmp(OMRPORT_CTLDATA_VMEM_NUMA_INTERLEAVE_MEM, key)) {
+#if defined(PPG_numa_platform_interleave_memory)
+		Assert_PRT_true((0 == value) || (1 == value));
+		PPG_numa_platform_interleave_memory = value;
+#endif /* PPG_numa_platform_interleave_memory */
+		return 0;
+	}
+
 	if (0 == strcmp(OMRPORT_CTLDATA_VMEM_NUMA_ENABLE, key)) {
 #if defined(PPG_numa_platform_supports_numa)
 		Assert_PRT_true((0 == value) || (1 == value));

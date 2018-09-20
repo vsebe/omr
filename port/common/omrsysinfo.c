@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2016 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -28,19 +28,17 @@
 #include "omrport.h"
 #include <string.h>
 
-
-
 /**
- * Sets the number of entitled CPUs, which is specified by the user.
- *
+ * Sets the number of user-specified CPUs, value which overrides all other forms of CPU detection
+ * in omrsysinfo_get_number_CPUs_by_type for type OMRPORT_CPU_TARGET.
+ * 
  * @param[in] portLibrary The port library.
- * @param[in] number Number of entitled CPUs.
+ * @param[in] number Number of user-specified CPUs.
  */
 void
-omrsysinfo_set_number_entitled_CPUs(struct OMRPortLibrary *portLibrary, uintptr_t number)
+omrsysinfo_set_number_user_specified_CPUs(struct OMRPortLibrary *portLibrary, uintptr_t number)
 {
-	portLibrary->portGlobals->entitledCPUs = number;
-	return;
+	portLibrary->portGlobals->userSpecifiedCPUs = number;
 }
 
 /**
@@ -144,8 +142,8 @@ omrsysinfo_get_executable_name(struct OMRPortLibrary *portLibrary, const char *a
  * 	- OMRPORT_CPU_PHYSICAL: Number of physical CPU's on this machine
  * 	- OMRPORT_CPU_ONLINE: Number of online CPU's on this machine
  * 	- OMRPORT_CPU_BOUND: Number of physical CPU's bound to this process
- * 	- OMRPORT_CPU_ENTITLED: Number of CPU's the user has specified should be used by the process
- * 	- OMRPORT_CPU_TARGET: Number of CPU's that should be used by the process. This is OMR_MIN(BOUND, ENTITLED).
+ * 	- OMRPORT_CPU_TARGET: Number of CPU's that should be used by the process. This is normally BOUND, but is 
+ *    overridden by portLibrary->portGlobals->userSpecifiedCPUs if it is set.
  *
  * @param[in] portLibrary The port library.
  * @param[in] type Flag to indicate the information type (see function description).
@@ -154,7 +152,6 @@ omrsysinfo_get_executable_name(struct OMRPortLibrary *portLibrary, const char *a
  * 			Returns 0 if:
  * 			 - Physical failed (error)
  * 			 - Bound failed (error)
- * 			 - Entitled is disabled
  * 			 - For target if bound failed (error)
  */
 uintptr_t
@@ -171,9 +168,6 @@ omrsysinfo_get_number_CPUs_by_type(struct OMRPortLibrary *portLibrary, uintptr_t
 		break;
 	case OMRPORT_CPU_BOUND:
 		toReturn = 0;
-		break;
-	case OMRPORT_CPU_ENTITLED:
-		toReturn = portLibrary->portGlobals->entitledCPUs;
 		break;
 	case OMRPORT_CPU_TARGET:
 		toReturn = 0;
@@ -926,6 +920,65 @@ omrsysinfo_cgroup_are_subsystems_enabled(struct OMRPortLibrary *portLibrary, uin
  */
 int32_t
 omrsysinfo_cgroup_get_memlimit(struct OMRPortLibrary *portLibrary, uint64_t *limit)
+{
+	return OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM;
+}
+
+/**
+ * Checks if memory limit is set by the process's cgroup for memory subsystem
+ *
+ * @param[in] portLibrary pointer to OMRPortLibrary
+ *
+ * @return TRUE if memory limit is set by the process's cgroup, FALSE otherwise
+ */
+BOOLEAN
+omrsysinfo_cgroup_is_memlimit_set(struct OMRPortLibrary *portLibrary)
+{
+	return FALSE;
+}
+
+/**
+ * Gets the file descriptor by opening the file passed as a param fileName with PortLibrary file_open API.
+ * Caller should be using "omrfile_close" (Port Library API) to close the file descriptor after calling this API.
+ *
+ * @param[in] portLibrary pointer to OMRPortLibrary
+ *
+ * @param[in] subsystemFlag for checking the index of the subsystem
+ *
+ * @param[in] fileName pointer to cgroup subsystem filename
+ *
+ * @return file descriptor of file on success and OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM on failure
+ */
+intptr_t
+omrsysinfo_cgroup_get_handle_subsystem_file(struct OMRPortLibrary *portLibrary,  uint64_t subsystemFlag, const char *fileName)
+{
+	return OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM;
+}
+
+/**
+ * Gets the list of subsystems available
+ *
+ * @param[in] portLibrary pointer to OMRPortLibrary
+ *
+ * @return OMRCgroupEntry struct pointer of the linked list if available, NULL otherwise
+ */
+struct OMRCgroupEntry *
+omrsysinfo_get_cgroup_subsystem_list(struct OMRPortLibrary *portLibrary)
+{
+	return NULL;
+}
+
+/**
+ * States if JVM is running in a container
+ *
+ * @param[in] portLibrary pointer to OMRPortLibrary
+ *
+ * @param[in] inContainer BOOLEAN pointer to state running in container or not
+ *
+ * @return 0 on success and OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM on failure
+ */
+int32_t
+omrsysinfo_is_running_in_container(struct OMRPortLibrary *portLibrary, BOOLEAN *inContainer)
 {
 	return OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM;
 }

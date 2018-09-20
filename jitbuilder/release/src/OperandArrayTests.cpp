@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2017 IBM Corp. and others
+ * Copyright (c) 2016, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -24,7 +24,6 @@
 #include <iostream>
 #include <stdlib.h>
 #include <stdint.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <stdarg.h>
 
@@ -371,7 +370,7 @@ OperandArrayTestMethod::OperandArrayTestMethod(TR::TypeDictionary *d)
    }
 
 // convenience macros
-#define STACK(b)         ((OMR::VirtualMachineOperandArray *)(b)->vmState())
+#define STACK(b)         ((TR::VirtualMachineOperandArray *)(b)->vmState())
 #define UPDATEARRAY(b,s) (STACK(b)->UpdateArray(b, s))
 #define COMMIT(b)        (STACK(b)->Commit(b))
 #define RELOAD(b)        (STACK(b)->Reload(b))
@@ -506,13 +505,13 @@ OperandArrayTestMethod::testArray(TR::BytecodeBuilder *builder, bool useEqual)
 bool
 OperandArrayTestMethod::buildIL()
    {
-   TR::IlType *pElementType = _types->PointerTo(_types->PointerTo(Word));
+   TR::IlType *ppElementType = _types->PointerTo(_types->PointerTo(ARRAYVALUEILTYPE));
 
    Call("createArray", 0);
 
    TR::IlValue *arrayBaseAddress = ConstAddress(&_realArray);
-   OMR::VirtualMachineRegister *arrayBase = new OMR::VirtualMachineRegister(this, "ARRAY", pElementType, sizeof(ARRAYVALUETYPE), arrayBaseAddress);
-   OMR::VirtualMachineOperandArray *array = new OMR::VirtualMachineOperandArray(this, _realArrayLength, _valueType, arrayBase);
+   TR::VirtualMachineRegister *arrayBase = new TR::VirtualMachineRegister(this, "ARRAY", ppElementType, sizeof(ARRAYVALUETYPE), arrayBaseAddress);
+   TR::VirtualMachineOperandArray *array = new TR::VirtualMachineOperandArray(this, _realArrayLength, _valueType, arrayBase);
 
    setVMState(array);
 
@@ -534,13 +533,13 @@ OperandArrayTestUsingFalseMethod::OperandArrayTestUsingFalseMethod(TR::TypeDicti
 bool
 OperandArrayTestUsingFalseMethod::buildIL()
    {
-   TR::IlType *pElementType = _types->PointerTo(_types->PointerTo(Word));
+   TR::IlType *ppElementType = _types->PointerTo(_types->PointerTo(ARRAYVALUEILTYPE));
 
    Call("createArray", 0);
 
    TR::IlValue *arrayBaseAddress = ConstAddress(&_realArray);
-   OMR::VirtualMachineRegister *arrayBase = new OMR::VirtualMachineRegister(this, "ARRAY", pElementType, sizeof(ARRAYVALUETYPE), arrayBaseAddress);
-   OMR::VirtualMachineOperandArray *array = new OMR::VirtualMachineOperandArray(this, _realArrayLength, _valueType, arrayBase);
+   TR::VirtualMachineRegister *arrayBase = new TR::VirtualMachineRegister(this, "ARRAY", ppElementType, sizeof(ARRAYVALUETYPE), arrayBaseAddress);
+   TR::VirtualMachineOperandArray *array = new TR::VirtualMachineOperandArray(this, _realArrayLength, _valueType, arrayBase);
 
    setVMState(array);
 

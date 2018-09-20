@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2014, 2016 IBM Corp. and others
+ * Copyright (c) 2014, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -24,12 +24,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#if !defined(WIN32)
+#if !defined(OMR_OS_WINDOWS)
 #include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <dirent.h>
-#endif /* !defined(WIN32) */
+#endif /* !defined(OMR_OS_WINDOWS) */
 
 #include "DATMerge.hpp"
 #include "ArgParser.hpp"
@@ -228,13 +228,16 @@ DATMerge::merge(J9TDFOptions *options, const char *fromFileName)
 			perror("fopen error");
 			goto failed;
 		}
-		printf("tracemerge creating dat file: %s\n", toFileName);
+		if (true == options->verboseOutput) {
+			printf("tracemerge creating dat file: %s\n", toFileName);
+		}
 
 		fprintf(toFile, "%u.%u\n", options->rasMajorVersion, options->rasMinorVersion);
 	}
 
-
-	printf("Adding %s to dat file: %s\n", fromFileName, toFileName);
+	if (true == options->verboseOutput) {
+		printf("Adding %s to dat file: %s\n", fromFileName, toFileName);
+	}
 
 	while (fromFilereader.hasNext()) {
 		const char *line = fromFilereader.next();

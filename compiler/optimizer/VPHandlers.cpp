@@ -2161,6 +2161,7 @@ TR::Node *constrainIaload(OMR::ValuePropagation *vp, TR::Node *node)
          if (symRef == vp->comp()->getSymRefTab()->findClassFromJavaLangClassSymbolRef())
             {
             TR::KnownObjectTable *knot = vp->comp()->getOrCreateKnownObjectTable();
+            TR_ASSERT(knot, "Can not have a TR::VPKnownObject without a known-object table");
 
                {
                TR::VMAccessCriticalSection constrainIaloadCriticalSection(vp->comp(),
@@ -2212,9 +2213,9 @@ TR::Node *constrainIaload(OMR::ValuePropagation *vp, TR::Node *node)
           && base->getClass()
           && (!needInitializedCheck || TR::Compiler->cls.isClassInitialized(vp->comp(), base->getClass())))
          {
-         if (symRef == vp->comp()->getSymRefTab()->findJavaLangClassFromClassSymbolRef())
+         TR::KnownObjectTable *knot = vp->comp()->getOrCreateKnownObjectTable();
+         if (knot && symRef == vp->comp()->getSymRefTab()->findJavaLangClassFromClassSymbolRef())
             {
-            TR::KnownObjectTable *knot = vp->comp()->getOrCreateKnownObjectTable();
             TR_J9VMBase *fej9 = (TR_J9VMBase *)(vp->comp()->fe());
             TR::KnownObjectTable::Index knownObjectIndex = knot->getIndexAt((uintptrj_t*)(base->getClass() + fej9->getOffsetOfJavaLangClassFromClassField()));
             vp->addBlockOrGlobalConstraint(node,
@@ -2651,10 +2652,39 @@ TR::Node *constrainIaload(OMR::ValuePropagation *vp, TR::Node *node)
       {
       vp->comp()->fej9()->markHotField(vp->comp(), node->getSymbolReference(), base->getClass(), base->isFixedClass());
       }
+
+   if (node->getSymbolReference())
+      {
+      if (!node->getSymbolReference()->isUnresolved() &&
+          (node->getSymbolReference()->getSymbol()->getKind() == TR::Symbol::IsShadow) &&
+          (node->getSymbolReference()->getCPIndex() >= 0) &&
+          node->getSymbolReference()->getOwningMethod(vp->comp()))
+         {
+         int32_t fieldSigLen;
+         const char *fieldSig = node->getSymbolReference()->getOwningMethod(vp->comp())->fieldSignatureChars(
+                                      node->getSymbolReference()->getCPIndex(), fieldSigLen);
+         int32_t fieldNameLen;
+         const char *fieldName = node->getSymbolReference()->getOwningMethod(vp->comp())->fieldNameChars(
+                                      node->getSymbolReference()->getCPIndex(), fieldNameLen);
+         char *className = node->getSymbolReference()->getOwningMethod(vp->comp())->classNameChars();
+         uint16_t classNameLen = node->getSymbolReference()->getOwningMethod(vp->comp())->classNameLength();
+         if (fieldName && !strncmp(fieldName, "this$0", 6) &&
+              className && !strncmp(className, "java/util/", 10))
+            {
+            if (vp->trace())
+               traceMsg(vp->comp(), "NonNull node %d className %.*s fieldSig %.*s fieldName %.*s\n",
+                       node->getGlobalIndex(),
+                       classNameLen,className,
+                       fieldSigLen,fieldSig,
+                       fieldNameLen,fieldName);
+            vp->addBlockConstraint(node, TR::VPNonNullObject::create(vp));
+            }
+         }
+      }
 #endif
 
 
-  if (node->isNonNull())
+   if (node->isNonNull())
       vp->addBlockConstraint(node, TR::VPNonNullObject::create(vp));
    else if (node->isNull())
       vp->addBlockConstraint(node, TR::VPNullObject::create(vp));
@@ -3534,6 +3564,7 @@ TR::Node *constrainInstanceOf(OMR::ValuePropagation *vp, TR::Node *node)
                TR::Node::recreate(node, TR::acmpne);
                vp->removeNode(node->getChild(1), true);
                node->setAndIncChild(1, TR::Node::create(node, TR::aconst, 0, 0));
+               vp->addGlobalConstraint(node->getChild(1), TR::VPNullObject::create(vp));
                }
 
 
@@ -3629,6 +3660,7 @@ TR::Node *constrainInstanceOf(OMR::ValuePropagation *vp, TR::Node *node)
                   TR::Node::recreate(node, TR::acmpne);
                   vp->removeNode(node->getChild(1), true);
                   node->setAndIncChild(1, TR::Node::create(node, TR::aconst, 0, 0));
+                  vp->addGlobalConstraint(node->getChild(1), TR::VPNullObject::create(vp));
                      }
 
 
@@ -5279,10 +5311,12 @@ TR::Node *constrainCall(OMR::ValuePropagation *vp, TR::Node *node)
 
    vp->constrainRecognizedMethod(node);
 
-   // Return if the node is not a regular call (xcall/xcalli) anymore
-   if (!node->getOpCode().isCall() || node->getSymbol()->castToMethodSymbol()->isHelper())
+   // Return if the node is not a call anymore
+   if (!node->getOpCode().isCall())
       return node;
 
+   // Symbol might have been changed, get it from node again
+   symbol = node->getSymbol()->castToMethodSymbol();
    if ( symbol )
       {
 #ifdef J9_PROJECT_SPECIFIC
@@ -5532,9 +5566,9 @@ TR::Node *constrainCall(OMR::ValuePropagation *vp, TR::Node *node)
                 TR::Compiler->cls.isClassInitialized(vp->comp(), j9class) &&
                 performTransformation(vp->comp(), "%s Remove TR::sun_misc_Unsafe_ensureClassInitialized call, class already initialized [%p]\n", OPT_DETAILS, node))
                 {
-                vp->removeNode(node);
-                vp->_curTree->setNode(NULL);
-                return NULL;
+                TR::Node* receiver = node->getChild(0);
+                TR::TransformUtil::transformCallNodeToPassThrough(vp, node, vp->_curTree, receiver);
+                return node;
                 }
             }
          }
@@ -5654,35 +5688,6 @@ void transformToOptimizedCloneCall(OMR::ValuePropagation *vp, TR::Node *node, bo
 #endif
 
 
-TR::Node *transformCloneCallSetup(OMR::ValuePropagation *vp, TR::Node *node, TR::VPConstraint *constraint, bool isDirectCall)
-   {
-   //Change the call and agruments from object.clone to optimizedClone.
-   //
-   vp->_objectCloneCallNodes.add(node);
-   vp->_objectCloneCallTreeTops.add(vp->_curTree);
-   /*
-   if (isDirectCall && constraint && constraint->getClass())
-      {
-      //Determine is we can create a new instance object of the source's class.
-      //
-      TR_OpaqueClassBlock *clazz = constraint->getClass();
-      if (constraint->isClassObject() == TR_yes)
-         clazz = vp->fe()->getClassClassPointer(clazz);
-
-      //If we do not know the class, or the class is an array, pass NULL as the second parameter.
-      if (clazz && (((TR::Compiler->cls.classDepthOf(clazz) == 0) && !constraint->isFixedClass()) || (constraint->getClassType()->isArray() != TR_no)))
-        clazz = NULL;
-
-      vp->_objectCloneInstanceClasses.add(clazz);
-      }
-   else
-      {
-      vp->_objectCloneInstanceClasses.add(NULL);
-      }
-   */
-   return node;
-   }
-
 #ifdef J9_PROJECT_SPECIFIC
 TR::Node *setCloneClassInNode(OMR::ValuePropagation *vp, TR::Node *node, TR::VPConstraint *constraint, bool isGlobal)
    {
@@ -5726,8 +5731,8 @@ TR::Node *constrainAcall(OMR::ValuePropagation *vp, TR::Node *node)
    {
    constrainCall(vp, node);
 
-   // Return if the node is not a regular call (xcall/xcalli) anymore
-   if (!node->getOpCode().isCall() || node->getSymbol()->castToMethodSymbol()->isHelper())
+   // Return if the node is not a call anymore
+   if (!node->getOpCode().isCall())
       return node;
 
    // This node can be constrained by the return type of the method.
@@ -7131,25 +7136,36 @@ TR::Node *constrainIabs(OMR::ValuePropagation *vp, TR::Node *node)
 
    bool isGlobal;
    TR::VPConstraint *child = vp->getConstraint(node->getFirstChild(), isGlobal);
-   if (child)
+   if (child == NULL)
       {
-      if (child->asIntConst())
+      vp->addGlobalConstraint(
+         node,
+         TR::VPMergedConstraints::create(
+            vp,
+            TR::VPIntConst::create(vp, TR::getMinSigned<TR::Int32>()),
+            TR::VPIntRange::create(vp, 0, TR::getMaxSigned<TR::Int32>())));
+      }
+   else
+      {
+      int32_t low = child->getLowInt();
+      int32_t high = child->getHighInt();
+      if (low == high)
          {
-         if (child->asIntConst()->getInt() < 0)
-          {
-          TR::VPConstraint *constraint = TR::VPIntConst::create(vp, -child->asIntConst()->getInt());
-          vp->replaceByConstant(node, constraint, isGlobal);
-          }
-         else
-          {
-          TR::VPConstraint *constraint = TR::VPIntConst::create(vp, child->asIntConst()->getInt());
-          vp->replaceByConstant(node, constraint, isGlobal);
-          }
+         int32_t value = low;
+         if (value < 0)
+            value = -(uint32_t)value;
+
+         TR::VPConstraint *constraint = TR::VPIntConst::create(vp, value);
+         vp->replaceByConstant(node, constraint, isGlobal);
          }
       else
          {
-         int32_t high = child->getHighInt();
-         int32_t low = child->getLowInt();
+         TR::VPConstraint *minConstraint = NULL;
+         if (low == TR::getMinSigned<TR::Int32>())
+            {
+            minConstraint = TR::VPIntConst::create(vp, low);
+            low++;
+            }
 
          if (low < 0 && high <= 0)
           {
@@ -7170,16 +7186,18 @@ TR::Node *constrainIabs(OMR::ValuePropagation *vp, TR::Node *node)
             return vp->replaceNode(node, node->getFirstChild(), vp->_curTree);
             }
 
-         if (low == high)
-          {
-           TR::VPConstraint *constraint = TR::VPIntConst::create(vp, low);
-           vp->replaceByConstant(node, constraint, isGlobal);
-          }
+         if (low != high || minConstraint != NULL)
+            {
+            TR::VPConstraint *constraint = TR::VPIntRange::create(vp, low, high);
+            if (minConstraint != NULL)
+               constraint = TR::VPMergedConstraints::create(vp, minConstraint, constraint);
+            vp->addBlockOrGlobalConstraint(node, constraint ,isGlobal);
+            }
          else
-          {
-           TR::VPConstraint *constraint = TR::VPIntRange::create(vp, low, high);
-             vp->addBlockOrGlobalConstraint(node, constraint ,isGlobal);
-          }
+            {
+            TR::VPConstraint *constraint = TR::VPIntConst::create(vp, low);
+            vp->replaceByConstant(node, constraint, isGlobal);
+            }
          }
        }
 
@@ -7195,26 +7213,36 @@ TR::Node *constrainLabs(OMR::ValuePropagation *vp, TR::Node *node)
 
    bool isGlobal;
    TR::VPConstraint *child = vp->getConstraint(node->getFirstChild(), isGlobal);
-
-   if (child)
+   if (child == NULL)
       {
-      if (child->asLongConst())
+      vp->addGlobalConstraint(
+         node,
+         TR::VPMergedConstraints::create(
+            vp,
+            TR::VPLongConst::create(vp, TR::getMinSigned<TR::Int64>()),
+            TR::VPLongRange::create(vp, 0, TR::getMaxSigned<TR::Int64>())));
+      }
+   else
+      {
+      int64_t low = child->getLowLong();
+      int64_t high = child->getHighLong();
+      if (low == high)
          {
-         if (child->asLongConst()->getLong() < 0)
-          {
-          TR::VPConstraint *constraint = TR::VPLongConst::create(vp, -child->asLongConst()->getLong());
-          vp->replaceByConstant(node, constraint, isGlobal);
-          }
-      else
-          {
-          TR::VPConstraint *constraint = TR::VPLongConst::create(vp, child->asLongConst()->getLong());
-          vp->replaceByConstant(node, constraint, isGlobal);
-          }
+         int64_t value = low;
+         if (value < 0)
+            value = -(uint64_t)value;
+
+         TR::VPConstraint *constraint = TR::VPLongConst::create(vp, value);
+         vp->replaceByConstant(node, constraint, isGlobal);
          }
       else
          {
-         int64_t high = child->getHighLong();
-         int64_t low = child->getLowLong();
+         TR::VPConstraint *minConstraint = NULL;
+         if (low == TR::getMinSigned<TR::Int64>())
+            {
+            minConstraint = TR::VPLongConst::create(vp, low);
+            low++;
+            }
 
          if (low < 0 && high <= 0)
           {
@@ -7235,20 +7263,22 @@ TR::Node *constrainLabs(OMR::ValuePropagation *vp, TR::Node *node)
             return vp->replaceNode(node, node->getFirstChild(), vp->_curTree);
             }
 
-         if (low == high)
-          {
-           TR::VPConstraint *constraint = TR::VPLongConst::create(vp, low);
-           vp->replaceByConstant(node, constraint, isGlobal);
-          }
-         else
-          {
-           TR::VPConstraint *constraint = TR::VPLongRange::create(vp, low, high);
-           bool didReduction = reduceLongOpToIntegerOp(vp, node, constraint);
-             vp->addBlockOrGlobalConstraint(node, constraint ,isGlobal);
+         if (low != high || minConstraint != NULL)
+            {
+            TR::VPConstraint *constraint = TR::VPLongRange::create(vp, low, high);
+            if (minConstraint != NULL)
+               constraint = TR::VPMergedConstraints::create(vp, minConstraint, constraint);
+            bool didReduction = reduceLongOpToIntegerOp(vp, node, constraint);
+            vp->addBlockOrGlobalConstraint(node, constraint ,isGlobal);
 
-             if (didReduction)
-            return node;
-          }
+            if (didReduction)
+               return node;
+            }
+         else
+            {
+            TR::VPConstraint *constraint = TR::VPLongConst::create(vp, low);
+            vp->replaceByConstant(node, constraint, isGlobal);
+            }
           }
       }
 
@@ -9270,6 +9300,43 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
    TR::VPConstraint *rhs = NULL;
    TR::VPConstraint *rel = NULL;
 
+   if (rhsChild->getOpCodeValue() == TR::iconst
+       && lhsChild->getOpCode().isCompareForEquality())
+      {
+      int32_t rhsConst = rhsChild->getInt();
+      if (rhsConst == 0 || rhsConst == 1)
+         {
+         TR::Node * lhsGrandchild = lhsChild->getChild(0);
+         TR::Node * rhsGrandchild = lhsChild->getChild(1);
+         TR::ILOpCode lhsOp = lhsGrandchild->getOpCode();
+         if (lhsOp.isInt() || lhsOp.isLong() || lhsOp.isRef())
+            {
+            TR::ILOpCode lhsCmp = lhsChild->getOpCode();
+            TR::ILOpCode newIfOp = lhsCmp.convertCmpToIfCmp();
+            if (branchOnEqual != bool(rhsConst))
+               newIfOp = newIfOp.getOpCodeForReverseBranch();
+
+            if (performTransformation(vp->comp(),
+                  "%sChanging n%un (%s (%s ...) %d) to (%s ...)\n",
+                  OPT_DETAILS,
+                  node->getGlobalIndex(),
+                  node->getOpCode().getName(),
+                  lhsCmp.getName(),
+                  rhsConst,
+                  newIfOp.getName()))
+               {
+               TR::Node::recreate(node, newIfOp.getOpCodeValue());
+               node->setAndIncChild(0, lhsGrandchild);
+               node->setAndIncChild(1, rhsGrandchild);
+               lhsChild->recursivelyDecReferenceCount();
+               rhsChild->recursivelyDecReferenceCount();
+               lhsChild = lhsGrandchild;
+               rhsChild = rhsGrandchild;
+               branchOnEqual = newIfOp.isCompareTrueIfEqual();
+               }
+            }
+         }
+      }
 
    TR::CFGEdge *edge = vp->findOutEdge(vp->_curBlock->getSuccessors(), target);
 
@@ -9639,9 +9706,9 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
                      TR::VPConstraint *classConstraint = vp->getConstraint(classNode, isGlobal);
                      if (ignoreVirtualGuard && classConstraint && classConstraint->isFixedClass())
                         {
-                        uint8_t   *clazz            = (uint8_t*)classConstraint->getClass();
+                        TR_OpaqueClassBlock *clazz  = classConstraint->getClass();
                         int32_t    vftOffset        = vtableEntryNode->getSymbolReference()->getOffset();
-                        intptrj_t  vftEntry         = *(intptrj_t*)(clazz + vftOffset);
+                        intptrj_t  vftEntry         = TR::Compiler->cls.getVFTEntry(vp->comp(), clazz, vftOffset);
                         bool       childrenAreEqual = (vftEntry == methodPtrNode->getAddress());
                         bool       testForEquality  = (node->getOpCodeValue() == TR::ifacmpeq);
                         traceMsg(vp->comp(), "TR_MethodTest: node=%p, vtableEntryNode=%p, clazz=%p, vftOffset=%d, vftEntry=%p, childrenAreEqual=%d, testForEquality=%d\n",
@@ -10972,17 +11039,12 @@ static TR::Node *constrainCmpeqne(OMR::ValuePropagation *vp, TR::Node *node, boo
    TR::VPConstraint *constraint = NULL;
    if (result >= 0)
       {
-      if ((lhsGlobal || vp->lastTimeThrough()) &&
-          performTransformation(vp->comp(), "%sChanging node [%p] %s into constant %d\n", OPT_DETAILS, node, node->getOpCode().getName(), result))
+      constraint = TR::VPIntConst::create(vp, result/*, isUnsigned*/);
+      if (lhsGlobal || vp->lastTimeThrough())
          {
-         vp->removeChildren(node);
-         TR::ILOpCodes op = /*isUnsigned ? TR::iuconst : */TR::iconst;
-         TR::Node::recreate(node, op);
-         node->setInt(result);
-         vp->invalidateValueNumberInfo();
+         vp->replaceByConstant(node, constraint, lhsGlobal);
          return node;
          }
-      constraint = TR::VPIntConst::create(vp, result/*, isUnsigned*/);
       }
    else
       {
@@ -12704,7 +12766,7 @@ TR::Node *constrainArrayStoreChk(OMR::ValuePropagation *vp, TR::Node *node)
                   }
 
               else if ( !vp->comp()->compileRelocatableCode() &&
-                        !(TR::Options::getCmdLineOptions()->getOption(TR_DisableArrayStoreCheckOpts))  &&
+                        !(vp->comp()->getOption(TR_DisableArrayStoreCheckOpts))  &&
                         arrayComponentClass &&
                         objectClass  &&
                         vp->fe()->isInstanceOf(objectClass, arrayComponentClass,true,true)

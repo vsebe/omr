@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -65,16 +65,8 @@ public:
 /*
  * Member functions
  */
-private:
-	/**
-	 * Get the total size (including header slot) of the object from the object header slot.
-	 */
-	uintptr_t
-	extractSizeFromObjectHeaderSlot(fomrobject_t headerSlot)
-	{
-		return headerSlot >> _objectHeaderSlotSizeShift;
-	}
 
+private:
 protected:
 public:
 	/**
@@ -116,7 +108,7 @@ public:
 	MMINLINE uintptr_t
 	getObjectHeaderSizeInBytes(omrobjectptr_t objectPtr)
 	{
-		return sizeof(fomrobject_t);
+		return sizeof(ObjectHeader);
 	}
 
 	/**
@@ -144,8 +136,7 @@ public:
 	MMINLINE uintptr_t
 	getObjectSizeInBytesWithHeader(omrobjectptr_t objectPtr)
 	{
-		fomrobject_t *headerSlotAddress = (fomrobject_t *)objectPtr + _objectHeaderSlotOffset;
-		return extractSizeFromObjectHeaderSlot(*headerSlotAddress);
+		return objectPtr->header.sizeInBytes();
 	}
 
 	/**
@@ -220,7 +211,8 @@ public:
 	MMINLINE uintptr_t
 	getForwardedObjectSizeInBytes(MM_ForwardedHeader *forwardedHeader)
 	{
-		return extractSizeFromObjectHeaderSlot(forwardedHeader->getPreservedSlot());
+		ObjectHeader header(forwardedHeader->getPreservedSlot());
+		return header.sizeInBytes();
 	}
 
 	/**

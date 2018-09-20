@@ -317,6 +317,19 @@ ifeq ($(HOST_ARCH),arm)
 endif
 
 #
+# Now setup stuff for AARCH64 assembly
+#
+ifeq ($(HOST_ARCH),aarch64)
+    AARCH64ASM_CMD?=$(SED_PATH)
+
+    SPP_CMD?=$(CC_PATH)
+    
+    SPP_INCLUDES=$(PRODUCT_INCLUDES)
+    SPP_DEFINES+=$(CX_DEFINES) $(SPP_DEFINES_EXTRA)
+    SPP_FLAGS+=$(CX_FLAGS) $(SPP_FLAGS_EXTRA)
+endif
+
+#
 # Setup the archiver
 #
 AR_CMD?=$(AR_PATH)
@@ -338,12 +351,20 @@ ifeq ($(HOST_BITS),32)
     ifeq ($(HOST_ARCH),z)
         SOLINK_FLAGS+=-m31
     else
-        SOLINK_FLAGS+=-m32
+        ifneq ($(HOST_ARCH),arm)
+            ifneq ($(HOST_ARCH),aarch64)
+                SOLINK_FLAGS+=-m32
+            endif
+        endif
     endif
 endif
 
 ifeq ($(HOST_BITS),64)
-    SOLINK_FLAGS+=-m64
+    ifneq ($(HOST_ARCH),arm)
+        ifneq ($(HOST_ARCH),aarch64)
+            SOLINK_FLAGS+=-m64
+        endif
+    endif
 endif
 
 ifeq ($(HOST_ARCH),p)

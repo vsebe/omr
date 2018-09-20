@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -39,6 +39,7 @@ namespace TR { class Compilation; }
 namespace TR { class PersistentInfo; }
 
 extern TR::Monitor *memoryAllocMonitor;
+extern const char * objectName[];
 
 namespace TR
    {
@@ -63,13 +64,47 @@ void   TR_MemoryBase::jitPersistentFree(void * mem)                  { ::trPersi
 TR::PersistentInfo * TR_PersistentMemory::getNonThreadSafePersistentInfo() { return ::trPersistentMemory->getPersistentInfo(); }
 
 TR_PersistentMemory::TR_PersistentMemory(
-   void *   jitConfig,
    TR::PersistentAllocator &persistentAllocator
    ) :
-   TR_MemoryBase(jitConfig),
+   TR_MemoryBase(),
    _signature(MEMINFO_SIGNATURE),
    _persistentInfo(this),
    _persistentAllocator(TR::ref(persistentAllocator)),
    _totalPersistentAllocations()
    {
+   }
+
+TR_PersistentMemory::TR_PersistentMemory(
+   void *   jitConfig,
+   TR::PersistentAllocator &persistentAllocator
+   ) :
+   TR_MemoryBase(),
+   _signature(MEMINFO_SIGNATURE),
+   _persistentInfo(this),
+   _persistentAllocator(TR::ref(persistentAllocator)),
+   _totalPersistentAllocations()
+   {
+   }
+
+void
+TR_PersistentMemory::printMemStats()
+   {
+   fprintf(stderr, "TR_PersistentMemory Stats:\n");
+   for (uint32_t i = 0; i < TR_MemoryBase::NumObjectTypes; i++)
+      {
+      fprintf(stderr, "\t_totalPersistentAllocations[%s]=%lu\n", objectName[i], (unsigned long)_totalPersistentAllocations[i]);
+      }
+   fprintf(stderr, "\n");
+   }
+
+void
+TR_PersistentMemory::printMemStatsToVlog()
+   {
+   TR_VerboseLog::vlogAcquire();
+   TR_VerboseLog::writeLine(TR_Vlog_MEMORY, "TR_PersistentMemory Stats:");
+   for (uint32_t i = 0; i < TR_MemoryBase::NumObjectTypes; i++)
+      {
+      TR_VerboseLog::writeLine(TR_Vlog_MEMORY, "\t_totalPersistentAllocations[%s]=%lu", objectName[i], (unsigned long)_totalPersistentAllocations[i]);
+      }
+   TR_VerboseLog::vlogRelease();
    }

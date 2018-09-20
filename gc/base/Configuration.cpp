@@ -40,6 +40,7 @@
 #include "OMR_VM.hpp"
 #include "OMR_VMThread.hpp"
 #include "MemoryManager.hpp"
+#include "MemorySpace.hpp"
 #include "ParallelDispatcher.hpp"
 #include "ReferenceChainWalkerMarkMap.hpp"
 #if defined(OMR_GC_THREAD_LOCAL_HEAP)
@@ -84,6 +85,16 @@ void
 MM_Configuration::tearDown(MM_EnvironmentBase* env)
 {
 	MM_GCExtensionsBase* extensions = env->getExtensions();
+
+	/* DefaultMemorySpace needs to be killed before
+	 * ext->heap is freed in MM_Configuration::tearDown. */
+	if (NULL != extensions->heap) {
+		MM_MemorySpace *modronMemorySpace = extensions->heap->getDefaultMemorySpace();
+		if  (NULL != modronMemorySpace) {
+			modronMemorySpace->kill(env);
+		}
+		extensions->heap->setDefaultMemorySpace(NULL);
+	}
 
 	/* referenceChainWalkerMarkMap must be destroyed before Memory Manager is killed */
 	if (NULL != extensions->referenceChainWalkerMarkMap) {

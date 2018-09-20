@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015, 2016 IBM Corp. and others
+ * Copyright (c) 2015, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -54,12 +54,11 @@ typedef struct CopyEnvToBufferArgs {
 #endif
 
 void
-omrsysinfo_set_number_entitled_CPUs(struct OMRPortLibrary *portLibrary, uintptr_t number)
+omrsysinfo_set_number_user_specified_CPUs(struct OMRPortLibrary *portLibrary, uintptr_t number)
 {
-	Trc_PRT_sysinfo_set_number_entitled_CPUs_Entered();
-	portLibrary->portGlobals->entitledCPUs = number;
-	Trc_PRT_sysinfo_set_number_entitled_CPUs_Exit(number);
-	return;
+	Trc_PRT_sysinfo_set_number_user_specified_CPUs_Entered();
+	portLibrary->portGlobals->userSpecifiedCPUs = number;
+	Trc_PRT_sysinfo_set_number_user_specified_CPUs_Exit(number);
 }
 
 /**
@@ -621,16 +620,12 @@ omrsysinfo_get_number_CPUs_by_type(struct OMRPortLibrary *portLibrary, uintptr_t
 
 		break;
 	}
-	case OMRPORT_CPU_ENTITLED:
-		toReturn = portLibrary->portGlobals->entitledCPUs;
-		break;
 	case OMRPORT_CPU_TARGET: {
-		uintptr_t entitled = portLibrary->portGlobals->entitledCPUs;
-		uintptr_t bound = omrsysinfo_get_number_CPUs_by_type(portLibrary, OMRPORT_CPU_BOUND);
-		if (entitled != 0 && entitled < bound) {
-			toReturn = entitled;
+		uintptr_t specified = portLibrary->portGlobals->userSpecifiedCPUs;
+		if (0 < specified) {
+			toReturn = specified;
 		} else {
-			toReturn = bound;
+			toReturn = portLibrary->sysinfo_get_number_CPUs_by_type(portLibrary, OMRPORT_CPU_BOUND);
 		}
 		break;
 	}
@@ -767,6 +762,10 @@ omrsysinfo_get_memory_info(struct OMRPortLibrary *portLibrary, struct J9MemoryIn
 	/* Note that Windows does not have 'buffered memory' and hence, memInfo->buffered remains -1. */
 
 	memInfo->timestamp = (portLibrary->time_nano_time(portLibrary) / NANOSECS_PER_USEC);
+
+	memInfo->hostAvailPhysical = memInfo->availPhysical;
+	memInfo->hostCached = memInfo->cached;
+	memInfo->hostBuffered = memInfo->buffered;
 
 	Trc_PRT_sysinfo_get_memory_info_Exit(0);
 	PdhCloseQuery(statsHandle);
@@ -1663,6 +1662,30 @@ omrsysinfo_cgroup_are_subsystems_enabled(struct OMRPortLibrary *portLibrary, uin
 
 int32_t
 omrsysinfo_cgroup_get_memlimit(struct OMRPortLibrary *portLibrary, uint64_t *limit)
+{
+	return OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM;
+}
+
+BOOLEAN
+omrsysinfo_cgroup_is_memlimit_set(struct OMRPortLibrary *portLibrary)
+{
+	return FALSE;
+}
+
+intptr_t
+omrsysinfo_cgroup_get_handle_subsystem_file(struct OMRPortLibrary *portLibrary,  uint64_t subsystemFlag, const char *fileName)
+{
+	return OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM;
+}
+
+struct OMRCgroupEntry *
+omrsysinfo_get_cgroup_subsystem_list(struct OMRPortLibrary *portLibrary)
+{
+	return NULL;
+}
+
+int32_t
+omrsysinfo_is_running_in_container(struct OMRPortLibrary *portLibrary, BOOLEAN *inContainer)
 {
 	return OMRPORT_ERROR_SYSINFO_CGROUP_UNSUPPORTED_PLATFORM;
 }

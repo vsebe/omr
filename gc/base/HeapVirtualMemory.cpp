@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -27,7 +27,7 @@
 #include "EnvironmentBase.hpp"
 #include "Forge.hpp"
 #include "GCExtensionsBase.hpp"
-#include "Collector.hpp"
+#include "GlobalCollector.hpp"
 #include "HeapRegionManager.hpp"
 #include "Math.hpp"
 #include "MemoryManager.hpp"
@@ -74,7 +74,7 @@ MM_HeapVirtualMemory::initialize(MM_EnvironmentBase* env, uintptr_t size)
 	}
 
 	MM_GCExtensionsBase* extensions = env->getExtensions();
-	uintptr_t padding = extensions->heapTailPadding;
+	uintptr_t padding = 0;
 
 	uintptr_t effectiveHeapAlignment = _heapAlignment;
 	/* we need to ensure that we allocate the heap with region alignment since the region table requires that */
@@ -340,7 +340,7 @@ MM_HeapVirtualMemory::calculateOffsetFromHeapBase(void* address)
 bool
 MM_HeapVirtualMemory::heapAddRange(MM_EnvironmentBase* env, MM_MemorySubSpace* subspace, uintptr_t size, void* lowAddress, void* highAddress)
 {
-	MM_Collector* globalCollector = env->getExtensions()->getGlobalCollector();
+	MM_GlobalCollector* globalCollector = env->getExtensions()->getGlobalCollector();
 
 	bool result = true;
 	if (NULL != globalCollector) {
@@ -366,7 +366,7 @@ MM_HeapVirtualMemory::heapAddRange(MM_EnvironmentBase* env, MM_MemorySubSpace* s
 bool
 MM_HeapVirtualMemory::heapRemoveRange(MM_EnvironmentBase* env, MM_MemorySubSpace* subspace, uintptr_t size, void* lowAddress, void* highAddress, void* lowValidAddress, void* highValidAddress)
 {
-	MM_Collector* globalCollector = env->getExtensions()->getGlobalCollector();
+	MM_GlobalCollector* globalCollector = env->getExtensions()->getGlobalCollector();
 
 	bool result = true;
 	if (NULL != globalCollector) {

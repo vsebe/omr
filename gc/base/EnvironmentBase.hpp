@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -38,9 +38,6 @@
 #include "LargeObjectAllocateStats.hpp"
 #include "MarkStats.hpp"
 #include "RootScannerStats.hpp"
-#if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
-#include "ScavengerHotFieldStats.hpp"
-#endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
 #include "ScavengerStats.hpp"
 #include "SweepStats.hpp"
 #include "WorkPacketStats.hpp"
@@ -171,7 +168,6 @@ public:
 #endif /* OMR_GC_MODRON_STANDARD || OMR_GC_REALTIME */
 #if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
 	MM_ScavengerStats _scavengerStats;
-	MM_ScavengerHotFieldStats *_hotFieldStats; /**< hot field statistics for this GC thread */
 #endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	uint64_t _concurrentScavengerSwitchCount; /**< local counter of cycle start and cycle end transitions */
@@ -445,10 +441,9 @@ public:
 	
 	/**
 	 * Give up exclusive access in preparation for transferring it to a collaborating thread (i.e. main-to-master or master-to-main)
-	 * @deferredVMAccessRelease Set to true if caller wants to defer releasing VM access (for the calling thread) at a later point (to be done explicitly by the caller). The method may set it back to false, if unable to obey the request.
 	 * @return the exclusive count of the current thread before relinquishing 
 	 */
-	uintptr_t relinquishExclusiveVMAccess(bool *deferredVMAccessRelease = NULL);
+	uintptr_t relinquishExclusiveVMAccess();
 
 	/**
 	 * Assume exclusive access from a collaborating thread i.e. main-to-master or master-to-main)
@@ -632,9 +627,6 @@ public:
 #if defined(OMR_GC_SEGREGATED_HEAP)
 		,_allocationTracker(NULL)
 #endif /* OMR_GC_SEGREGATED_HEAP */
-#if defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC)
-		,_hotFieldStats(NULL)
-#endif /* defined(OMR_GC_MODRON_SCAVENGER) || defined(OMR_GC_VLHGC) */
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 		,_concurrentScavengerSwitchCount(0)
 #endif /* defined(OMR_GC_CONCURRENT_SCAVENGER) */

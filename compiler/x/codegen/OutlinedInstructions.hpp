@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -42,8 +42,10 @@ template <typename ListKind> class List;
 
 class TR_OutlinedInstructions
    {
-   TR::LabelSymbol       *_entryLabel;
-   TR::LabelSymbol       *_restartLabel;
+   friend class TR_OutlinedInstructionsGenerator;
+
+   TR::LabelSymbol      *_entryLabel;
+   TR::LabelSymbol      *_restartLabel;
    TR::Instruction      *_firstInstruction;
    TR::Instruction      *_appendInstruction;
    TR_X86OpCodes        _targetRegMovOpcode;
@@ -60,10 +62,9 @@ class TR_OutlinedInstructions
    //
    TR::list<OMR::RegisterUsage*> *_outlinedPathRegisterUsageList;
    TR::list<OMR::RegisterUsage*> *_mainlinePathRegisterUsageList;
-   TR_RegisterAssignerState *_registerAssignerStateAtMerge;
+   TR_RegisterAssignerState      *_registerAssignerStateAtMerge;
 
    bool                 _hasBeenRegisterAssigned;
-   bool                 _rematerializeVMThread;
 
    TR::Compilation *comp() { return TR::comp(); }
    TR::CodeGenerator *cg() { return _cg; }
@@ -84,6 +85,11 @@ class TR_OutlinedInstructions
    // do in a TR_OutlinedInstructions what you could have done in a normal
    // in-line internal control flow region.
    //
+   // NOTE: use this constructor directly is deprecated, for new development,
+   // use TR_OutlinedInstructionsGenerator instead.
+   // TR_OutlinedInstructionsGenerator will setup all necessary information for
+   // gc map and exception table.
+   //
    TR_OutlinedInstructions(TR::LabelSymbol *entryLabel, TR::CodeGenerator *cg);
 
    void swapInstructionListsWithCompilation();
@@ -91,10 +97,6 @@ class TR_OutlinedInstructions
    // For calls
    //
    TR_OutlinedInstructions(TR::Node *callNode, TR::ILOpCodes callOp, TR::Register *targetReg, TR::LabelSymbol *entryLabel, TR::LabelSymbol *restartLabel, TR::CodeGenerator *cg);
-
-   TR_OutlinedInstructions(TR::Node *callNode, TR::ILOpCodes callOp, TR::Register *targetReg, TR::LabelSymbol *entryLabel, TR::LabelSymbol *restartLabel, TR_X86OpCodes targetRegMovOpcode, TR::CodeGenerator *cg);
-
-   TR_OutlinedInstructions(TR::Node *callNode, TR::ILOpCodes callOp, TR::Register *targetReg, TR::LabelSymbol *entryLabel, TR::LabelSymbol *restartLabel, bool rematerializeVMThread, TR::CodeGenerator *cg);
 
    public:
 
@@ -142,7 +144,37 @@ class TR_OutlinedInstructions
 
    TR::RegisterDependencyConditions  *formEvaluatedArgumentDepList();
 
-   void setRematerializeVMThread() { _rematerializeVMThread = true; }
-
    };
+
+/**
+   @class TR_OutlinedInstructionsGenerator
+   @brief This class is used to switch to outlined code generation in the manner of the RAII idiom.
+
+   The main use of this class is to generate instruction in the outlined code region, for example, cold paths codes.
+*/
+class TR_OutlinedInstructionsGenerator
+   {
+   public:
+   /**
+      @brief Switch to outlined code generation.
+
+      @param entryLabel: the entry label of generated outlined code.
+      @param node      : the node of which generated outlined code belongs to.
+      @param cg        : the code generator.
+   */
+   TR_OutlinedInstructionsGenerator(TR::LabelSymbol* entryLabel, TR::Node* node, TR::CodeGenerator* cg);
+   /**
+      @brief Switch back to mainline code generation.
+   */
+   ~TR_OutlinedInstructionsGenerator();
+   /**
+      @brief Obtain the underlying TR_OutlinedInstructions.
+   */
+   inline TR_OutlinedInstructions* obtain()     { return _oi; }
+   inline TR_OutlinedInstructions* operator->() { return obtain(); }
+
+   private:
+   TR_OutlinedInstructions* _oi;
+   };
+
 #endif

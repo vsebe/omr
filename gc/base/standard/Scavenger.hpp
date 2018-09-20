@@ -191,6 +191,8 @@ public:
 	 */
 	MMINLINE GC_ObjectScanner *getObjectScanner(MM_EnvironmentStandard *env, omrobjectptr_t objectptr, void *objectScannerState, uintptr_t flags);
 
+	uintptr_t calculateCopyScanCacheSizeForWaitingThreads(uintptr_t maxCacheSize, uintptr_t threadCount, uintptr_t waitingThreads);
+	uintptr_t calculateCopyScanCacheSizeForQueueLength(uintptr_t maxCacheSize, uintptr_t threadCount, uintptr_t scanCacheCount);
 	MMINLINE uintptr_t calculateOptimumCopyScanCacheSize(MM_EnvironmentStandard *env);
 	MMINLINE MM_CopyScanCacheStandard *reserveMemoryForAllocateInSemiSpace(MM_EnvironmentStandard *env, omrobjectptr_t objectToEvacuate, uintptr_t objectReserveSizeInBytes);
 	MM_CopyScanCacheStandard *reserveMemoryForAllocateInTenureSpace(MM_EnvironmentStandard *env, omrobjectptr_t objectToEvacuate, uintptr_t objectReserveSizeInBytes);
@@ -227,7 +229,7 @@ public:
 	 * @return Whether or not objectPtr should be remembered.
 	 */
 	MMINLINE bool scavengeObjectSlots(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *scanCache, omrobjectptr_t objectPtr, uintptr_t flags, omrobjectptr_t *rememberedSetSlot);
-	MMINLINE void incrementalScavengeObjectSlots(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, MM_CopyScanCacheStandard* scanCache, MM_CopyScanCacheStandard **nextScanCache);
+	MMINLINE MM_CopyScanCacheStandard *incrementalScavengeObjectSlots(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, MM_CopyScanCacheStandard* scanCache);
 
 	MMINLINE bool scavengeRememberedObject(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr);
 	void scavengeRememberedSetList(MM_EnvironmentStandard *env);
@@ -285,21 +287,28 @@ public:
 	MMINLINE uintptr_t getFailedTenureLargestObject() { return _failedTenureLargestObject; };
 	MMINLINE bool failedTenureThresholdReached() { return _failedTenureThresholdReached; };
 
-	void completeScanCache(MM_EnvironmentStandard *env);
-	void incrementalScanCacheBySlot(MM_EnvironmentStandard *env);
+	void completeScanCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard* scanCache);
+	void incrementalScanCacheBySlot(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard* scanCache);
 
 	MMINLINE MM_CopyScanCacheStandard *aliasToCopyCache(MM_EnvironmentStandard *env, GC_SlotObject *scannedSlot, MM_CopyScanCacheStandard* scanCache, MM_CopyScanCacheStandard* copyCache);
 	MMINLINE uintptr_t scanCacheDistanceMetric(MM_CopyScanCacheStandard* cache, GC_SlotObject *scanSlot);
 	MMINLINE uintptr_t copyCacheDistanceMetric(MM_CopyScanCacheStandard* cache);
 
 	MMINLINE MM_CopyScanCacheStandard *getNextScanCacheFromList(MM_EnvironmentStandard *env);
-	MMINLINE MM_CopyScanCacheStandard *getSurvivorCopyCache(MM_EnvironmentStandard *env);
-	MMINLINE MM_CopyScanCacheStandard *getDeferredCopyCache(MM_EnvironmentStandard *env);
-
 	void addCopyCachesToFreeList(MM_EnvironmentStandard *env);
-
-	MMINLINE bool isWorkAvailableInCache(MM_CopyScanCacheStandard *scanCache);
 	MMINLINE void addCacheEntryToScanListAndNotify(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *newCacheEntry);
+
+	MMINLINE bool
+	isWorkAvailableInCache(MM_CopyScanCacheStandard *cache)
+	{
+		return (cache->scanCurrent < cache->cacheAlloc);
+	}
+
+	MMINLINE bool
+	isWorkAvailableInCacheWithCheck(MM_CopyScanCacheStandard *cache)
+	{
+		return ((NULL != cache) && isWorkAvailableInCache(cache));
+	}
 
 	/**
 	 * reinitializes the cache with the given base and top addresses.
@@ -370,12 +379,6 @@ public:
 	void reportGCIncrementEnd(MM_EnvironmentStandard *env);
 	void reportScavengeStart(MM_EnvironmentStandard *env);
 	void reportScavengeEnd(MM_EnvironmentStandard *env, bool lastIncrement);
-
-	MMINLINE MM_ScavengerHotFieldStats *getHotFieldStats(MM_EnvironmentBase *env) { return env->_hotFieldStats; }
-	void masterClearHotFieldStats();
-	void masterReportHotFieldStats();
-	void clearHotFieldStats(MM_EnvironmentBase *env);
-	void mergeHotFieldStats(MM_EnvironmentBase *env);
 
 	/**
 	 * Add the specified object to the remembered set.

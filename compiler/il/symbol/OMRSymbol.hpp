@@ -103,8 +103,7 @@ protected:
       _name(0),
       _flags(0),
       _flags2(0),
-      _localIndex(0),
-      _restrictedRegisterNumber(-1)
+      _localIndex(0)
    { }
 
    /**
@@ -154,7 +153,6 @@ public:
    inline TR::RegisterMappedSymbol            *castToRegisterMappedSymbol();
    inline TR::AutomaticSymbol                 *castToAutoSymbol();
    inline TR::AutomaticSymbol                 *castToVariableSizeSymbol();
-   inline TR::AutomaticSymbol                 *castToAutoMarkerSymbol();
    inline TR::ParameterSymbol                 *castToParmSymbol();
    inline TR::AutomaticSymbol                 *castToInternalPointerAutoSymbol();
    inline TR::AutomaticSymbol                 *castToLocalObjectSymbol();
@@ -201,8 +199,6 @@ public:
 
    uint16_t getLocalIndex()                 { return _localIndex; }
    uint16_t setLocalIndex(uint16_t li)      { return (_localIndex = li); }
-
-   uint8_t getRestrictedRegisterNumber()    { return _restrictedRegisterNumber; }
 
    /**
     * Flag functions
@@ -273,6 +269,9 @@ public:
    void setHoldsMonitoredObject()           { _flags.set(HoldsMonitoredObject); }
    bool holdsMonitoredObject()              { return _flags.testAny(HoldsMonitoredObject); }
 
+   void setIsDebugCounter()                 { _flags2.set(DebugCounter); }
+   bool isDebugCounter()                    { return _flags2.testAny(DebugCounter); }
+
    inline bool isNamed();
 
    // flag methods specific to Autos
@@ -294,9 +293,6 @@ public:
 
    inline void setSpillTempLoaded();
    inline bool isSpillTempLoaded();
-
-   inline void setAutoMarkerSymbol();
-   inline bool isAutoMarkerSymbol();
 
    inline void setVariableSizeSymbol();
    inline bool isVariableSizeSymbol();
@@ -320,6 +316,9 @@ public:
    //
    inline void setConstString();
    inline bool isConstString();
+
+   inline void setConstantDynamic();
+   inline bool isConstantDynamic();
 
    inline void setAddressIsCPIndexOfStatic(bool b);
    inline bool addressIsCPIndexOfStatic();
@@ -487,7 +486,7 @@ public:
       // Available              = 0x00020000,
       AutoAddressTaken          = 0x04000000, ///< a loadaddr of this auto exists
       SpillTempLoaded           = 0x04000000, ///< share bit with loadaddr because spill temps will never have their address taken. Used to remove store to spill if never loaded
-      AutoMarkerSymbol          = 0x02000000, ///< dummy symbol marking some auto boundary
+      // Available              = 0x02000000,
       VariableSizeSymbol        = 0x01000000, ///< non-java only?: specially managed automatic symbols that contain both an activeSize and a size
       ThisTempForObjectCtor     = 0x01000000, ///< java only; this temp for j/l/Object constructor
 
@@ -554,11 +553,12 @@ public:
       HasAddrTaken              = 0x00000010, // used to denote that we have a loadaddr of this symbol
       MethodTypeTableEntry      = 0x00000020, // JSR292
       NotDataAddress            = 0x00000040, // isStatic only: AOT
-      // Available              = 0x00000080,
+      DebugCounter              = 0x00000080, // Debug Counter for AOT
       UnsafeShadow              = 0x00000100,
       NamedShadow               = 0x00000200,
       ImmutableField            = 0x00000400,
       PendingPush               = 0x00000800,
+      ConstantDynamic           = 0x00001000,
       };
 
 protected:
@@ -568,8 +568,6 @@ protected:
    flags32_t     _flags;
    flags32_t     _flags2;
    uint16_t      _localIndex;
-   uint8_t       _restrictedRegisterNumber;
-
 
    /**
     * Shadow Symbol

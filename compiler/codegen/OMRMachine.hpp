@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,25 +19,26 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#ifndef OMR_MACHINE_BASE_INCL
-#define OMR_MACHINE_BASE_INCL
+#ifndef OMR_MACHINE_INCL
+#define OMR_MACHINE_INCL
 
 /*
  * The following #define and typedef must appear before any #includes in this file
  */
-#ifndef OMR_MACHINEBASE_CONNECTOR
-#define OMR_MACHINEBASE_CONNECTOR
+#ifndef OMR_MACHINE_CONNECTOR
+#define OMR_MACHINE_CONNECTOR
 namespace OMR { class Machine; }
 namespace OMR { typedef OMR::Machine MachineConnector; }
 #endif
 
 #include <stddef.h>                            // for NULL
 #include <stdint.h>                            // for uint8_t, uint32_t
+#include "codegen/RegisterConstants.hpp"
+#include "codegen/RealRegister.hpp"
 #include "env/TRMemory.hpp"                    // for TR_Memory, etc
 #include "infra/Annotations.hpp"               // for OMR_EXTENSIBLE
-#include "codegen/RegisterConstants.hpp"
 
-namespace TR { class RealRegister; }
+namespace TR { class CodeGenerator; }
 namespace TR { class Machine; }
 
 namespace OMR
@@ -45,69 +46,106 @@ namespace OMR
 
 class OMR_EXTENSIBLE Machine
    {
-   uint8_t _numberRegisters[NumRegisterKinds];
-   TR_GlobalRegisterNumber _firstGlobalRegisterNumber[NumRegisterKinds];
-   TR_GlobalRegisterNumber _lastGlobalRegisterNumber[NumRegisterKinds];
-   TR_GlobalRegisterNumber _lastRealRegisterGlobalRegisterNumber;
-   TR_GlobalRegisterNumber _overallLastGlobalRegisterNumber;
+
+   int16_t numLockedGPRs;
+   int16_t numLockedHPRs;
+   int16_t numLockedFPRs;
+   int16_t numLockedVRFs;
 
    public:
 
    TR_ALLOC(TR_Memory::Machine)
 
-   Machine() : _lastRealRegisterGlobalRegisterNumber(-1), _overallLastGlobalRegisterNumber(-1)
+   Machine(TR::CodeGenerator *cg)
+      :
+      _cg(cg),
+      numLockedGPRs(-1),
+      numLockedHPRs(-1),
+      numLockedFPRs(-1),
+      numLockedVRFs(-1)
       {
-       for(uint32_t i=0;i<NumRegisterKinds;i++)
-         {
-         _numberRegisters[i]=-1;
-         _firstGlobalRegisterNumber[i]=0;
-         _lastGlobalRegisterNumber[i]=-1;
-         }
-      }
-
-   // TODO: numVRFRegs should probably be explicitly set to 0 instead of defaulting to 0
-   Machine(uint8_t numIntRegs, uint8_t numFPRegs, uint8_t numVRFRegs = 0) : _lastRealRegisterGlobalRegisterNumber(-1), _overallLastGlobalRegisterNumber(-1)
-      {
-       for(uint32_t i=0;i<NumRegisterKinds;i++)
-         {
-         _numberRegisters[i]=0;
-         _firstGlobalRegisterNumber[i]=0;
-         _lastGlobalRegisterNumber[i]=-1;
-         }
-       _numberRegisters[TR_GPR] = numIntRegs;
-       _numberRegisters[TR_FPR] = numFPRegs;
-       _numberRegisters[TR_VRF] = numVRFRegs; // TODO vrf gra : needs this but every platform will need to pass numVRFRegs in
       }
 
    inline TR::Machine * self();
 
-   uint8_t getNumberOfRegisters(TR_RegisterKinds rk) { return _numberRegisters[rk]; }
+   /**
+    * \return : the cached TR::CodeGenerator object
+    */
+   TR::CodeGenerator *cg() {return _cg;}
 
-   // Lets try and use the genericly named method above. These are only for backward compatibility
-   uint8_t getNumberOfGPRs();
-   uint8_t getNumberOfFPRs();
+   /** \brief
+    *     Sets the number of locked registers of a specific register kind for use as a cache lookup.
+    *
+    *  \param kind
+    *     The register kind to count.
+    *
+    *  \param numLocked
+    *     The number of registers of the respective kind that are in the locked state.
+    *
+    *  \return
+    *     The number of registers of the respective kind that are in the locked state.
+    */
+   int16_t setNumberOfLockedRegisters(TR_RegisterKinds kind, int16_t numLocked)
+      {
+      TR_ASSERT(numLocked >= 0, "Expecting number of locked registers to be >= 0");
+      switch (kind)
+         {
+         case TR_GPR: numLockedGPRs = numLocked; return numLockedGPRs;
+         case TR_HPR: numLockedHPRs = numLocked; return numLockedHPRs;
+         case TR_FPR: numLockedFPRs = numLocked; return numLockedFPRs;
+         case TR_VRF: numLockedVRFs = numLocked; return numLockedVRFs;
+         default:
+            TR_ASSERT_FATAL(false, "Unknown register kind");
+            return -1;
+         }
+      }
 
-   // GlobalRegisterNumbers consiste of real registers in the order of assignment preference. All register kinds combined
-   TR_GlobalRegisterNumber getFirstGlobalRegisterNumber(TR_RegisterKinds rk) { return _firstGlobalRegisterNumber[rk]; }
-   TR_GlobalRegisterNumber getLastGlobalRegisterNumber(TR_RegisterKinds rk) { return _lastGlobalRegisterNumber[rk]; }
-   TR_GlobalRegisterNumber getLastRealRegisterGlobalRegisterNumber() { return _lastRealRegisterGlobalRegisterNumber; }
-   TR_GlobalRegisterNumber getLastGlobalRegisterNumber() { return _overallLastGlobalRegisterNumber; }
-   virtual TR::RealRegister *getRealRegister(TR_GlobalRegisterNumber grn) {return NULL; }
-   TR_GlobalRegisterNumber getNextGlobalRegisterNumber() { return (++_overallLastGlobalRegisterNumber); }
+   /** \brief
+    *     Gets the number of locked registers of a specific register kind.
+    *
+    *  \param kind
+    *     The register kind to count.
+    *
+    *  \return
+    *     The number of registers of the respective kind that are in the locked state.
+    */
+   int16_t getNumberOfLockedRegisters(TR_RegisterKinds kind)
+      {
+      switch (kind)
+         {
+         case TR_GPR: TR_ASSERT(numLockedGPRs >= 0, "Expecting number of locked registers to be >= 0"); return numLockedGPRs;
+         case TR_HPR: TR_ASSERT(numLockedHPRs >= 0, "Expecting number of locked registers to be >= 0"); return numLockedHPRs;
+         case TR_FPR: TR_ASSERT(numLockedFPRs >= 0, "Expecting number of locked registers to be >= 0"); return numLockedFPRs;
+         case TR_VRF: TR_ASSERT(numLockedVRFs >= 0, "Expecting number of locked registers to be >= 0"); return numLockedVRFs;
+         default:
+            TR_ASSERT_FATAL(false, "Unknown register kind");
+            return -1;
+         }
+      }
 
-   protected:
-   // setters should only be used by specific machine class initializers
+   /**
+    * \brief Retrieve a pointer to the register file
+    */
+   TR::RealRegister **registerFile() { return _registerFile; }
 
-   uint8_t setNumberOfRegisters(TR_RegisterKinds rk, uint8_t num) { return (_numberRegisters[rk] = num); }
-   uint8_t setNumberOfGPRs(uint8_t numIntRegs);
-   uint8_t setNumberOfFPRs(uint8_t numFPRegs);
+   /**
+    * \brief Retrieves the TR::RealRegister object for the given real register
+    *
+    * \param[in] rn : the desired real register
+    *
+    * \return : the desired TR::RealRegister object
+    */
+   TR::RealRegister *realRegister(TR::RealRegister::RegNum rn) { return _registerFile[rn]; }
 
-   TR_GlobalRegisterNumber setFirstGlobalRegisterNumber(TR_RegisterKinds rk, TR_GlobalRegisterNumber grn) { return (_firstGlobalRegisterNumber[rk]=grn); }
-   TR_GlobalRegisterNumber setLastGlobalRegisterNumber(TR_RegisterKinds rk, TR_GlobalRegisterNumber grn) { return (_lastGlobalRegisterNumber[rk]=grn); }
-   TR_GlobalRegisterNumber setLastRealRegisterGlobalRegisterNumber(TR_GlobalRegisterNumber grn) { _overallLastGlobalRegisterNumber=grn; return (_lastRealRegisterGlobalRegisterNumber=grn); }
+private:
+
+   TR::CodeGenerator *_cg;
+
+protected:
+
+   TR::RealRegister *_registerFile[TR::RealRegister::NumRegisters];
 
    };
-
 }
 
 #endif

@@ -50,7 +50,7 @@
 #include "infra/Assert.hpp"                      // for TR_ASSERT
 #include "infra/List.hpp"                        // for ListIterator, List
 #include "ras/Debug.hpp"                         // for TR_Debug, etc
-#include "x/codegen/DataSnippet.hpp"             // for TR::IA32DataSnippet
+#include "x/codegen/DataSnippet.hpp"             // for TR::X86DataSnippet
 #include "x/codegen/OutlinedInstructions.hpp"
 #include "x/codegen/X86Instruction.hpp"
 #include "x/codegen/X86Ops.hpp"                  // for TR_X86OpCode, etc
@@ -115,6 +115,9 @@ TR_Debug::printx(TR::FILE *pOutFile, TR::Instruction  * instr)
       case TR::Instruction::IsRegReg:
          print(pOutFile, (TR::X86RegRegInstruction  *)instr);
          break;
+      case TR::Instruction::IsRegRegReg:
+         print(pOutFile, (TR::X86RegRegRegInstruction  *)instr);
+         break;
       case TR::Instruction::IsRegRegImm:
          print(pOutFile, (TR::X86RegRegImmInstruction  *)instr);
          break;
@@ -143,6 +146,9 @@ TR_Debug::printx(TR::FILE *pOutFile, TR::Instruction  * instr)
       case TR::Instruction::IsRegMemImm:
          print(pOutFile, (TR::X86RegMemImmInstruction  *)instr);
          break;
+      case TR::Instruction::IsRegRegMem:
+         print(pOutFile, (TR::X86RegRegMemInstruction  *)instr);
+         break;
       case TR::Instruction::IsFPRegMem:
          print(pOutFile, (TR::X86FPRegMemInstruction  *)instr);
          break;
@@ -163,10 +169,7 @@ TR_Debug::printx(TR::FILE *pOutFile, TR::Instruction  * instr)
          print(pOutFile, (TR::X86MemRegInstruction  *)instr);
          break;
       case TR::Instruction::IsMemRegImm:
-         print(pOutFile, (TR::X86MemRegRegInstruction  *)instr);
-         break;
-      case TR::Instruction::IsMemRegReg:
-         print(pOutFile, (TR::X86MemRegRegInstruction  *)instr);
+         print(pOutFile, (TR::X86MemRegImmInstruction  *)instr);
          break;
       case TR::Instruction::IsFPMemReg:
          print(pOutFile, (TR::X86FPMemRegInstruction  *)instr);
@@ -1044,14 +1047,10 @@ TR_Debug::print(TR::FILE *pOutFile, TR::X86RegRegRegInstruction  * instr)
    TR_RegisterSizes sourceSize = getSourceSizeFromInstruction(instr);
    if (!(instr->getOpCode().sourceRegIsImplicit() != 0))
       {
-      print(pOutFile, instr->getSourceRegister(), sourceSize);
+      print(pOutFile, instr->getSource2ndRegister(), sourceSize);
       trfprintf(pOutFile, ", ");
+      print(pOutFile, instr->getSourceRegister(), sourceSize);
       }
-
-   if (instr->getOpCodeValue() == SHLD4RegRegCL || instr->getOpCodeValue() <= SHRD4RegRegCL)
-      trfprintf(pOutFile, "cl");
-   else
-      print(pOutFile, instr->getSourceRightRegister(), sourceSize);
 
    printInstructionComment(pOutFile, 2, instr);
    dumpDependencies(pOutFile, instr);
@@ -1065,10 +1064,10 @@ TR_Debug::printReferencedRegisterInfo(TR::FILE *pOutFile, TR::X86RegRegRegInstru
       return;
 
    printRegisterInfoHeader(pOutFile, instr);
-   trfprintf(pOutFile,"    SourceRight       ");
-   printFullRegInfo(pOutFile, instr->getSourceRightRegister());
    trfprintf(pOutFile,"    Source            ");
    printFullRegInfo(pOutFile, instr->getSourceRegister());
+   trfprintf(pOutFile,"    2ndSource         ");
+   printFullRegInfo(pOutFile, instr->getSource2ndRegister());
    trfprintf(pOutFile,"    Target            ");
    printFullRegInfo(pOutFile, instr->getTargetRegister());
 
@@ -1242,61 +1241,6 @@ TR_Debug::print(TR::FILE *pOutFile, TR::X86MemRegImmInstruction  * instr)
    }
 
 void
-TR_Debug::print(TR::FILE *pOutFile, TR::X86MemRegRegInstruction  * instr)
-   {
-   if (pOutFile == NULL)
-      return;
-
-   int32_t barrier = memoryBarrierRequired(instr->getOpCode(), instr->getMemoryReference(), _cg, false);
-   int32_t barrierOffset = printPrefixAndMnemonicWithoutBarrier(pOutFile, instr, barrier);
-
-   print(pOutFile, instr->getMemoryReference(), getTargetSizeFromInstruction(instr));
-   trfprintf(pOutFile, ", ");
-   TR_RegisterSizes sourceSize = getSourceSizeFromInstruction(instr);
-   if (!(instr->getOpCode().sourceRegIsImplicit() != 0))
-      {
-      print(pOutFile, instr->getSourceRegister(), sourceSize);
-      trfprintf(pOutFile, ", ");
-      }
-
-   if (instr->getOpCodeValue() == SHLD4MemRegCL || instr->getOpCodeValue() == SHRD4MemRegCL)
-      trfprintf(pOutFile, "cl");
-   else
-      print(pOutFile, instr->getSourceRightRegister(), sourceSize);
-
-   printInstructionComment(pOutFile, 1, instr);
-   printMemoryReferenceComment(pOutFile, instr->getMemoryReference());
-
-   if (barrier & NeedsExplicitBarrier)
-      printPrefixAndMemoryBarrier(pOutFile, instr, barrier, barrierOffset);
-
-   dumpDependencies(pOutFile, instr);
-   trfflush(pOutFile);
-   }
-
-void
-TR_Debug::printReferencedRegisterInfo(TR::FILE *pOutFile, TR::X86MemRegRegInstruction  * instr)
-   {
-   if (pOutFile == NULL)
-      return;
-
-   printRegisterInfoHeader(pOutFile, instr);
-   trfprintf(pOutFile,"    SourceRight       ");
-   printFullRegInfo(pOutFile, instr->getSourceRightRegister());
-   trfprintf(pOutFile,"    Source            ");
-   printFullRegInfo(pOutFile, instr->getSourceRegister());
-
-   printReferencedRegisterInfo(pOutFile, instr->getMemoryReference());
-
-   if (instr->getDependencyConditions())
-      {
-      printFullRegisterDependencyInfo(pOutFile, instr->getDependencyConditions());
-      }
-
-   trfflush(pOutFile);
-   }
-
-void
 TR_Debug::print(TR::FILE *pOutFile, TR::X86RegMemInstruction  * instr)
    {
    if (pOutFile == NULL)
@@ -1373,6 +1317,65 @@ TR_Debug::print(TR::FILE *pOutFile, TR::X86RegMemImmInstruction  * instr)
       printPrefixAndMemoryBarrier(pOutFile, instr, barrier, barrierOffset);
 
    dumpDependencies(pOutFile, instr);
+   trfflush(pOutFile);
+   }
+
+void
+TR_Debug::print(TR::FILE *pOutFile, TR::X86RegRegMemInstruction  * instr)
+   {
+   if (pOutFile == NULL)
+      return;
+
+   int32_t barrier = memoryBarrierRequired(instr->getOpCode(), instr->getMemoryReference(), _cg, false);
+   int32_t barrierOffset = printPrefixAndMnemonicWithoutBarrier(pOutFile, instr, barrier);
+
+   if (!(instr->getOpCode().targetRegIsImplicit() != 0))
+      {
+      print(pOutFile, instr->getTargetRegister(), getTargetSizeFromInstruction(instr));
+      trfprintf(pOutFile, ", ");
+      }
+   if (!(instr->getOpCode().sourceRegIsImplicit() != 0))
+      {
+      print(pOutFile, instr->getSource2ndRegister(), getSourceSizeFromInstruction(instr));
+      trfprintf(pOutFile, ", ");
+      }
+   print(pOutFile, instr->getMemoryReference(), getSourceSizeFromInstruction(instr));
+   printInstructionComment(pOutFile, 2, instr);
+   printMemoryReferenceComment(pOutFile, instr->getMemoryReference());
+   TR::Symbol *symbol = instr->getMemoryReference()->getSymbolReference().getSymbol();
+   if (symbol && symbol->isSpillTempAuto())
+      {
+      trfprintf(pOutFile, "%s, spilled for %s",
+                    commentString(),
+                    getName(instr->getNode()->getOpCode()));
+      }
+
+   if (barrier & NeedsExplicitBarrier)
+      printPrefixAndMemoryBarrier(pOutFile, instr, barrier, barrierOffset);
+
+   dumpDependencies(pOutFile, instr);
+   trfflush(pOutFile);
+   }
+
+void
+TR_Debug::printReferencedRegisterInfo(TR::FILE *pOutFile, TR::X86RegRegMemInstruction  * instr)
+   {
+   if (pOutFile == NULL)
+      return;
+
+   printReferencedRegisterInfo(pOutFile, instr->getMemoryReference());
+
+   printFullRegInfo(pOutFile, instr->getSourceRegister());
+   trfprintf(pOutFile,"    2ndSource         ");
+   printFullRegInfo(pOutFile, instr->getSource2ndRegister());
+   trfprintf(pOutFile,"    Target            ");
+   printFullRegInfo(pOutFile, instr->getTargetRegister());
+
+   if (instr->getDependencyConditions())
+      {
+      printFullRegisterDependencyInfo(pOutFile, instr->getDependencyConditions());
+      }
+
    trfflush(pOutFile);
    }
 
@@ -1537,7 +1540,7 @@ TR_Debug::print(TR::FILE *pOutFile, TR::MemoryReference  * mr, TR_RegisterSizes 
       {
       // This must be an absolute memory reference (a constant data snippet or a label)
       //
-      TR::IA32DataSnippet *cds = mr->getDataSnippet();
+      TR::X86DataSnippet *cds = mr->getDataSnippet();
       TR::LabelSymbol *label = NULL;
       if (cds)
          label = cds->getSnippetLabel();
@@ -1558,16 +1561,23 @@ TR_Debug::print(TR::FILE *pOutFile, TR::MemoryReference  * mr, TR_RegisterSizes 
          }
       else if (disp)
          {
-         printIntConstant(pOutFile, (int32_t)disp, 16, TR_WordReg, true);
+         printHexConstant(pOutFile,
+                          TR::Compiler->target.is64Bit() ? disp : (uint32_t)disp,
+                          TR::Compiler->target.is64Bit() ? 16 : 8,
+                          true);
          }
       else if (cds)
          {
-         trfprintf(pOutFile, "DATA SNIPPET: ");
-         auto data = cds->getValue();
+         trfprintf(pOutFile, "Data ");
+         print(pOutFile, cds->getSnippetLabel());
+         trfprintf(pOutFile, ": ");
+         auto data = cds->getRawData();
          for (auto i = 0; i < cds->getDataSize(); i++)
             {
             trfprintf(pOutFile, "%02x ", 0xff & (unsigned int)(data[i]));
             }
+         trfprintf(pOutFile, "| ");
+         cds->printValue(pOutFile, this);
          }
       else
          {
@@ -1860,38 +1870,38 @@ TR_Debug::getName(uint32_t realRegisterIndex, TR_RegisterSizes size)
       case TR::RealRegister::SpilledReg:
          return "spilledReg";
       case TR::RealRegister::eax:
-         switch (size) { case 0: return "al";   case 1:  return "ax";  case 2: case -1: return "eax"; case 3: return "rax"; default: "?a?"; }
+         switch (size) { case 0: return "al";   case 1:  return "ax";  case 2: case -1: return "eax"; case 3: return "rax"; default: return "?a?"; }
       case TR::RealRegister::ebx:
-         switch (size) { case 0: return "bl";   case 1:  return "bx";  case 2: case -1: return "ebx"; case 3: return "rbx"; default: "?b?"; }
+         switch (size) { case 0: return "bl";   case 1:  return "bx";  case 2: case -1: return "ebx"; case 3: return "rbx"; default: return "?b?"; }
       case TR::RealRegister::ecx:
-         switch (size) { case 0: return "cl";   case 1:  return "cx";  case 2: case -1: return "ecx"; case 3: return "rcx"; default: "?c?"; }
+         switch (size) { case 0: return "cl";   case 1:  return "cx";  case 2: case -1: return "ecx"; case 3: return "rcx"; default: return "?c?"; }
       case TR::RealRegister::edx:
-         switch (size) { case 0: return "dl";   case 1:  return "dx";  case 2: case -1: return "edx"; case 3: return "rdx"; default: "?d?"; }
+         switch (size) { case 0: return "dl";   case 1:  return "dx";  case 2: case -1: return "edx"; case 3: return "rdx"; default: return "?d?"; }
       case TR::RealRegister::edi:
-         switch (size) { case 0: return "dil";  case 1: return "di";   case 2: case -1: return "edi"; case 3: return "rdi"; default: "?di?"; }
+         switch (size) { case 0: return "dil";  case 1: return "di";   case 2: case -1: return "edi"; case 3: return "rdi"; default: return "?di?"; }
       case TR::RealRegister::esi:
-         switch (size) { case 0: return "sil";  case 1: return "si";   case 2: case -1: return "esi"; case 3: return "rsi"; default: "?si?"; }
+         switch (size) { case 0: return "sil";  case 1: return "si";   case 2: case -1: return "esi"; case 3: return "rsi"; default: return "?si?"; }
       case TR::RealRegister::ebp:
-         switch (size) { case 0: return "bpl";  case 1: return "bp";   case 2: case -1: return "ebp"; case 3: return "rbp"; default: "?bp?"; }
+         switch (size) { case 0: return "bpl";  case 1: return "bp";   case 2: case -1: return "ebp"; case 3: return "rbp"; default: return "?bp?"; }
       case TR::RealRegister::esp:
-         switch (size) { case 0: return "spl";  case 1: return "sp";   case 2: case -1: return "esp"; case 3: return "rsp"; default: "?sp?"; }
+         switch (size) { case 0: return "spl";  case 1: return "sp";   case 2: case -1: return "esp"; case 3: return "rsp"; default: return "?sp?"; }
 #ifdef TR_TARGET_64BIT
       case TR::RealRegister::r8:
-         switch (size) { case 0: return "r8b";  case 1: return "r8w";  case 2: return "r8d"; case 3: case -1: return "r8"; default: "r8?"; }
+         switch (size) { case 0: return "r8b";  case 1: return "r8w";  case 2: return "r8d"; case 3: case -1: return "r8"; default: return "r8?"; }
       case TR::RealRegister::r9:
-         switch (size) { case 0: return "r9b";  case 1: return "r9w";  case 2: return "r9d"; case 3: case -1: return "r9"; default: "r9?"; }
+         switch (size) { case 0: return "r9b";  case 1: return "r9w";  case 2: return "r9d"; case 3: case -1: return "r9"; default: return "r9?"; }
       case TR::RealRegister::r10:
-         switch (size) { case 0: return "r10b"; case 1: return "r10w"; case 2: return "r10d"; case 3: case -1: return "r10"; default: "r10?"; }
+         switch (size) { case 0: return "r10b"; case 1: return "r10w"; case 2: return "r10d"; case 3: case -1: return "r10"; default: return "r10?"; }
       case TR::RealRegister::r11:
-         switch (size) { case 0: return "r11b"; case 1: return "r11w"; case 2: return "r11d"; case 3: case -1: return "r11"; default: "r11?"; }
+         switch (size) { case 0: return "r11b"; case 1: return "r11w"; case 2: return "r11d"; case 3: case -1: return "r11"; default: return "r11?"; }
       case TR::RealRegister::r12:
-         switch (size) { case 0: return "r12b"; case 1: return "r12w"; case 2: return "r12d"; case 3: case -1: return "r12"; default: "r12?"; }
+         switch (size) { case 0: return "r12b"; case 1: return "r12w"; case 2: return "r12d"; case 3: case -1: return "r12"; default: return "r12?"; }
       case TR::RealRegister::r13:
-         switch (size) { case 0: return "r13b"; case 1: return "r13w"; case 2: return "r13d"; case 3: case -1: return "r13"; default: "r13?"; }
+         switch (size) { case 0: return "r13b"; case 1: return "r13w"; case 2: return "r13d"; case 3: case -1: return "r13"; default: return "r13?"; }
       case TR::RealRegister::r14:
-         switch (size) { case 0: return "r14b"; case 1: return "r14w"; case 2: return "r14d"; case 3: case -1: return "r14"; default: "r14?"; }
+         switch (size) { case 0: return "r14b"; case 1: return "r14w"; case 2: return "r14d"; case 3: case -1: return "r14"; default: return "r14?"; }
       case TR::RealRegister::r15:
-         switch (size) { case 0: return "r15b"; case 1: return "r15w"; case 2: return "r15d"; case 3: case -1: return "r15"; default: "r15?"; }
+         switch (size) { case 0: return "r15b"; case 1: return "r15w"; case 2: return "r15d"; case 3: case -1: return "r15"; default: return "r15?"; }
 #endif
       case TR::RealRegister::vfp:
          switch (size) { case 2: case 3: case -1: return "vfp";   default: return unknownRegisterName('v'); } // 3 is for AMD64

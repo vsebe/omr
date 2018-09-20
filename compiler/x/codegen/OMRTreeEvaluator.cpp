@@ -754,6 +754,55 @@ TR::Register *OMR::X86::TreeEvaluator::sloadEvaluator(TR::Node *node, TR::CodeGe
    return reg;
    }
 
+TR::Register *OMR::X86::TreeEvaluator::irdbarEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   if (node->getSymbolReference()->getSymbol()->isStatic())
+      cg->decReferenceCount(node->getFirstChild());
+   return TR::TreeEvaluator::iloadEvaluator(node,cg);
+   }
+
+TR::Register *OMR::X86::TreeEvaluator::ardbarEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   if (node->getSymbolReference()->getSymbol()->isStatic())
+      cg->decReferenceCount(node->getFirstChild());
+   return TR::TreeEvaluator::aloadEvaluator(node, cg);
+   }
+
+TR::Register *OMR::X86::TreeEvaluator::frdbarEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   if (node->getSymbolReference()->getSymbol()->isStatic())
+      cg->decReferenceCount(node->getFirstChild());
+   return TR::TreeEvaluator::floadEvaluator(node, cg);
+   }
+
+TR::Register *OMR::X86::TreeEvaluator::drdbarEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   if (node->getSymbolReference()->getSymbol()->isStatic())
+      cg->decReferenceCount(node->getFirstChild());
+   return TR::TreeEvaluator::dloadEvaluator(node, cg);
+   }
+
+TR::Register *OMR::X86::TreeEvaluator::brdbarEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   if (node->getSymbolReference()->getSymbol()->isStatic())
+      cg->decReferenceCount(node->getFirstChild());
+   return TR::TreeEvaluator::bloadEvaluator(node, cg);
+   }
+
+TR::Register *OMR::X86::TreeEvaluator::srdbarEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   if (node->getSymbolReference()->getSymbol()->isStatic())
+      cg->decReferenceCount(node->getFirstChild());
+   return TR::TreeEvaluator::sloadEvaluator(node, cg);
+   }
+
+TR::Register *OMR::X86::TreeEvaluator::lrdbarEvaluator(TR::Node *node, TR::CodeGenerator *cg)
+   {
+   if (node->getSymbolReference()->getSymbol()->isStatic())
+      cg->decReferenceCount(node->getFirstChild());
+   return TR::TreeEvaluator::lloadEvaluator(node, cg);
+   }
+
 // cloadEvaluator handled by sloadEvaluator
 
 // iiload handled by iloadEvaluator
@@ -1154,674 +1203,13 @@ TR::Register *OMR::X86::TreeEvaluator::cstoreEvaluator(TR::Node *node, TR::CodeG
 
 // icstoreEvaluator handled by cstoreEvaluator
 
-static TR::Register *REPArraycmpEvaluator(TR::Node *node, TR::CodeGenerator *cg)
-   {
-   /*
-    * This evaluator will utilize the REPE CMPSQ (64 bit) or CMPSD (32 bit)
-    * instruction to compare 8 (64 bit) or 4 (32 bit) bytes of an array at a
-    * time. Before compare the 8 or 4 byte chunks, the residuals will be taken
-    * care of. By right shifting the length array 3 times, the size of the
-    * residual can be determined and taken care of by using CMPSB, CMPSW and
-    * CMPSD (64 bit). For example, if the residual is 7 Byte, each shift will
-    * set the CF flag, which will result in CMPSB, CMPSW and CMPSD being used.
-    * Depending on the result, equal/less than/greater than, the result register
-    * will be 0/1/2 respectively
-   */
-   TR::Register *resultRegister = cg->allocateRegister(TR_GPR);
-   TR::Node *src1AddrNode = node->getChild(0);
-   TR::Node *src2AddrNode = node->getChild(1);
-   TR::Node *lengthNode = node->getChild(2);
-
-   int32_t byteLen = TR::Compiler->target.is64Bit() ? 8 : 4;
-
-   TR::Register *src1AddrRegister = cg->gprClobberEvaluate(src1AddrNode, MOVRegReg());
-   TR::Register *src2AddrRegister = cg->gprClobberEvaluate(src2AddrNode, MOVRegReg());
-   TR::Register *arrayLenRegister = cg->gprClobberEvaluate(lengthNode, MOVRegReg());
-   TR::Register *counterRegister = cg->allocateRegister();
-
-   TR::LabelSymbol *startLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *notEqualLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *lessThanLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *endResultLabel = generateLabelSymbol(cg);
-
-   TR::LabelSymbol *wordCompareLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *dWordCompareLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *qWordCompareLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *equalLabel = generateLabelSymbol(cg);
-
-   generateLabelInstruction(LABEL, node, startLabel, cg);
-   startLabel->setStartInternalControlFlow();
-
-   TR::RegisterDependencyConditions *deps = generateRegisterDependencyConditions((uint8_t) 0, 5, cg);
-   deps->addPostCondition(src1AddrRegister, TR::RealRegister::esi, cg);
-   deps->addPostCondition(src2AddrRegister, TR::RealRegister::edi, cg);
-   deps->addPostCondition(counterRegister, TR::RealRegister::ecx, cg);
-   deps->addPostCondition(arrayLenRegister, TR::RealRegister::NoReg, cg);
-   deps->addPostCondition(resultRegister, TR::RealRegister::NoReg, cg);
-
-   generateRegRegInstruction(MOVRegReg(), node, counterRegister, arrayLenRegister, cg);
-   cg->stopUsingRegister(arrayLenRegister);
-
-   //Byte Compare
-   generateRegImmInstruction(SHRRegImm1(), node, counterRegister, 1, cg);
-   generateLabelInstruction(JAE4, node, wordCompareLabel, cg);
-   generateInstruction(CMPSB, node, deps, cg);
-   generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-
-   //Word Compare
-   generateLabelInstruction(LABEL, node, wordCompareLabel, cg);
-   generateRegImmInstruction(SHRRegImm1(), node, counterRegister, 1, cg);
-   generateLabelInstruction(JAE4, node, dWordCompareLabel, cg);
-   generateInstruction(CMPSW, node, deps, cg);
-   generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-
-   if (TR::Compiler->target.is64Bit())
-      {
-      //DWord Compare
-      generateLabelInstruction(LABEL, node, dWordCompareLabel, cg);
-      generateRegImmInstruction(SHRRegImm1(), node, counterRegister, 1, cg);
-      generateLabelInstruction(JAE4, node, qWordCompareLabel, cg);
-      generateInstruction(CMPSD, node, deps, cg);
-      generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-
-      //QWord Compare
-      generateLabelInstruction(LABEL, node, qWordCompareLabel, cg);
-      generateInstruction(REPECMPSQ, node, deps, cg);
-      generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-   else
-      {
-      generateLabelInstruction(LABEL, node, dWordCompareLabel, cg);
-      generateInstruction(REPECMPSD, node, deps, cg);
-      generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-
-   cg->stopUsingRegister(counterRegister);
-   cg->stopUsingRegister(src1AddrRegister);
-   cg->stopUsingRegister(src2AddrRegister);
-
-   //Result
-   generateLabelInstruction(LABEL, node, equalLabel, cg);
-   generateRegRegInstruction(TR::Compiler->target.is64Bit() ? XOR8RegReg : XOR4RegReg, node, resultRegister, resultRegister, cg); //Equal
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-
-   generateLabelInstruction(LABEL, node, notEqualLabel, cg);
-   generateLabelInstruction(JL4, node, lessThanLabel, cg);
-   generateRegImmInstruction(MOVRegImm4(), node, resultRegister, 2, cg); //Greater Than
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-
-   generateLabelInstruction(LABEL, node, lessThanLabel, cg);
-   generateRegImmInstruction(MOVRegImm4(), node, resultRegister, 1, cg); //Less Than
-
-   deps->stopAddingConditions();
-
-   generateLabelInstruction(LABEL, node, endResultLabel, deps, cg);
-   endResultLabel->setEndInternalControlFlow();
-
-   node->setRegister(resultRegister);
-
-   cg->decReferenceCount(src1AddrNode);
-   cg->decReferenceCount(src2AddrNode );
-   cg->decReferenceCount(lengthNode );
-
-   return resultRegister;
-   }
-
-static TR::Register *REPArraycmpLenEvaluator(TR::Node *node, TR::CodeGenerator *cg)
-   {
-   /*
-    * This evaluator will utilize the REPE CMPSQ (64 bit) or CMPSD (32 bit)
-    * instruction to compare 8 (64 bit) or 4 (32 bit) bytes of an array at a
-    * time. The residual bytes are compared using the REPE CMPSB instruction.
-    * If an inequality was found, in order to determine the first unequal byte,
-    * the ESI/EDI registers will be moved back 8 bytes (64 bit), 4 bytes (32 bit)
-    * or 1 byte if the inequality was found in the residuals. After this
-    * backtracking is done, REPE CMPSB will be used to find the byte of inequality
-   */
-   TR::Register *resultRegister = cg->allocateRegister(TR_GPR);
-   TR::Node *src1AddrNode = node->getChild(0);
-   TR::Node *src2AddrNode = node->getChild(1);
-   TR::Node *lengthNode = node->getChild(2);
-
-   int32_t byteLen = TR::Compiler->target.is64Bit() ? 8 : 4;
-
-   TR::Register *src1AddrRegister = cg->gprClobberEvaluate(src1AddrNode, MOVRegReg());
-   TR::Register *src2AddrRegister = cg->gprClobberEvaluate(src2AddrNode, MOVRegReg());
-   TR::Register *arrayLenRegister = cg->gprClobberEvaluate(lengthNode, MOVRegReg());
-
-   TR::Register *counterRegister = cg->allocateRegister();
-
-   TR::LabelSymbol *startLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *residualLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *notEqualLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *backtrackLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *equalLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *endResultLabel = generateLabelSymbol(cg);
-
-   generateLabelInstruction(LABEL, node, startLabel, cg);
-   startLabel->setStartInternalControlFlow();
-
-   TR::RegisterDependencyConditions *deps = generateRegisterDependencyConditions((uint8_t) 0, 5, cg);
-   deps->addPostCondition(src1AddrRegister, TR::RealRegister::esi, cg);
-   deps->addPostCondition(src2AddrRegister, TR::RealRegister::edi, cg);
-   deps->addPostCondition(counterRegister, TR::RealRegister::ecx, cg);
-   deps->addPostCondition(arrayLenRegister, TR::RealRegister::NoReg, cg);
-   deps->addPostCondition(resultRegister, TR::RealRegister::NoReg, cg);
-
-   //Setup
-   generateRegRegInstruction(MOVRegReg(), node, resultRegister, src1AddrRegister, cg);
-   generateRegRegInstruction(MOVRegReg(), node, counterRegister, arrayLenRegister, cg);
-
-
-   if (TR::Compiler->target.is64Bit())
-      {
-      //Qword REP compare
-      generateRegImmInstruction(SHRRegImm1(), node, counterRegister, 3, cg);
-      generateInstruction(REPECMPSQ, node, deps, cg);
-      }
-   else
-      {
-      //Dword REP compare
-      generateRegImmInstruction(SHRRegImm1(), node, counterRegister, 2, cg);
-      generateInstruction(REPECMPSD, node, deps, cg);
-      }
-   generateLabelInstruction(JNE4, node, backtrackLabel, cg);
-
-   //Residual
-   generateLabelInstruction(LABEL, node, residualLabel, cg);
-   generateRegRegInstruction(MOVRegReg(), node, counterRegister, arrayLenRegister, cg);
-   generateRegImmInstruction(ANDRegImm4(), node, counterRegister, 0x7, cg);
-   generateInstruction(REPECMPSB, node, deps, cg);
-   generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-
-   //Equal
-   generateRegRegInstruction(MOVRegReg(), node, resultRegister, arrayLenRegister, cg);
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-   cg->stopUsingRegister(arrayLenRegister);
-
-   //Inequality found, figure out which byte
-   generateLabelInstruction(LABEL, node, backtrackLabel, cg);
-   generateRegImmInstruction(SUBRegImm4(), node, src1AddrRegister, byteLen, cg);
-   generateRegImmInstruction(SUBRegImm4(), node, src2AddrRegister, byteLen, cg);
-   generateRegImmInstruction(MOVRegImm4(), node, counterRegister, byteLen, cg);
-   generateInstruction(REPECMPSB, node, deps, cg);
-   cg->stopUsingRegister(counterRegister);
-
-   //NotEqual
-   generateLabelInstruction(LABEL, node, notEqualLabel, cg);
-   generateRegImmInstruction(SUBRegImm4(), node, src1AddrRegister, 1, cg);
-   generateRegRegInstruction(SUBRegReg(), node, src1AddrRegister, resultRegister, cg);
-   generateRegRegInstruction(MOVRegReg(), node, resultRegister, src1AddrRegister, cg);
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-
-   //Result
-   cg->stopUsingRegister(src1AddrRegister);
-   cg->stopUsingRegister(src2AddrRegister);
-   deps->stopAddingConditions();
-
-   generateLabelInstruction(LABEL, node, endResultLabel, deps, cg);
-   endResultLabel->setEndInternalControlFlow();
-
-   node->setRegister(resultRegister);
-
-   cg->decReferenceCount(src1AddrNode);
-   cg->decReferenceCount(src2AddrNode );
-   cg->decReferenceCount(lengthNode );
-
-   return resultRegister;
-   }
-
-static TR::Register *ConstLenArraycmpEvaluator(TR::Node *node, TR::CodeGenerator *cg, uintptrj_t arrLen)
-   {
-   /* This evaluator will use CMPSQ (64 bit) or CMPSD (32 bit) to compare an array
-    * of known length, by generating a sequence of CMPS instructions. Any residuals
-    * will be dealt with CMPSB
-    * The result is similar to the REPArraycmpLenEvaluator
-   */
-   TR::Register *resultRegister = cg->allocateRegister(TR_GPR);
-   TR::Node *src1AddrNode = node->getChild(0);
-   TR::Node *src2AddrNode = node->getChild(1);
-   TR::Node *lengthNode = node->getChild(2);
-
-   int32_t byteLen = TR::Compiler->target.is64Bit() ? 8 : 4;
-
-   TR::Register *src1AddrRegister = cg->gprClobberEvaluate(src1AddrNode, MOVRegReg());
-   TR::Register *src2AddrRegister = cg->gprClobberEvaluate(src2AddrNode, MOVRegReg());
-
-   TR::LabelSymbol *startLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *notEqualLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *lessThanLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *endResultLabel = generateLabelSymbol(cg);
-
-   generateLabelInstruction(LABEL, node, startLabel, cg);
-   startLabel->setStartInternalControlFlow();
-
-   TR::RegisterDependencyConditions *deps = generateRegisterDependencyConditions((uint8_t) 0, 3, cg);
-   deps->addPostCondition(src1AddrRegister, TR::RealRegister::esi, cg);
-   deps->addPostCondition(src2AddrRegister, TR::RealRegister::edi, cg);
-   deps->addPostCondition(resultRegister, TR::RealRegister::NoReg, cg);
-
-   //Deal with the residual bits first, as we want to have a length that is a multiple of 8/4 in order to use CMPSQ
-   uintptrj_t residualLen = arrLen % byteLen;
-
-   if (TR::Compiler->target.is64Bit() && residualLen & 4)
-      {
-      generateInstruction(CMPSD, node, deps, cg);
-      generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-   if (residualLen & 2)
-      {
-      generateInstruction(CMPSW, node, deps, cg);
-      generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-   if (residualLen & 1)
-      {
-      generateInstruction(CMPSB, node, deps, cg);
-      generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-
-   arrLen -= residualLen;
-
-   //Perform CMPSQ, for the rest of the array, which should be a multiple of 8.
-   if (TR::Compiler->target.is64Bit())
-      TR_ASSERT(arrLen % 8 == 0, "64 Bit: arrLen should be a multiple of 8 at this point, the length is %d", arrLen);
-   else
-      TR_ASSERT(arrLen % 4 == 0, "32 Bit: arrLen should be a multiple of 4 at this point, the length is %d", arrLen);
-
-   while (arrLen > 0)
-      {
-         arrLen -= byteLen;
-         generateInstruction(TR::Compiler->target.is64Bit() ? CMPSQ : CMPSD, node, deps, cg);
-         generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-
-   //Result
-   cg->stopUsingRegister(src1AddrRegister);
-   cg->stopUsingRegister(src2AddrRegister);
-   generateRegRegInstruction(TR::Compiler->target.is64Bit() ? XOR8RegReg : XOR4RegReg, node, resultRegister, resultRegister, cg); //Equal
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-
-   generateLabelInstruction(LABEL, node, notEqualLabel, cg);
-   generateLabelInstruction(JL4, node, lessThanLabel, cg);
-   generateRegImmInstruction(MOVRegImm4(), node, resultRegister, 1, cg);
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-
-   generateLabelInstruction(LABEL, node, lessThanLabel, cg);
-   generateRegImmInstruction(MOVRegImm4(), node, resultRegister, 2, cg);
-
-   deps->stopAddingConditions();
-
-   generateLabelInstruction(LABEL, node, endResultLabel, deps, cg);
-   endResultLabel->setEndInternalControlFlow();
-
-   node->setRegister(resultRegister);
-
-   cg->decReferenceCount(src1AddrNode);
-   cg->decReferenceCount(src2AddrNode);
-   cg->recursivelyDecReferenceCount(lengthNode);
-
-   return resultRegister;
-   }
-
-static TR::Register *ConstLenArraycmpLenEvaluator(TR::Node *node, TR::CodeGenerator *cg, uintptrj_t arrLen)
-   {
-   /* This evaluator will use CMPSQ (64 bit) or CMPSD (32 bit) to compare an array
-    * of known length, by generating a sequence of CMPS instructions. Any residuals
-    * will be dealt with CMPSD (64 bit), CMPSW and CMPSB
-    * The result is similar to the REPArraycmpEvaluator
-   */
-   TR::Register *resultRegister = cg->allocateRegister(TR_GPR);
-   TR::Node *src1AddrNode = node->getChild(0);
-   TR::Node *src2AddrNode = node->getChild(1);
-   TR::Node *lengthNode = node->getChild(2);
-
-   int32_t byteLen = TR::Compiler->target.is64Bit() ? 8 : 4;
-
-   TR::Register *src1AddrRegister = cg->gprClobberEvaluate(src1AddrNode, MOVRegReg());
-   TR::Register *src2AddrRegister = cg->gprClobberEvaluate(src2AddrNode, MOVRegReg());
-   TR::Register *arrayLenRegister = cg->gprClobberEvaluate(lengthNode, MOVRegReg());
-
-   TR::LabelSymbol *startLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *residualLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *notEqualLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *backtrackLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *equalLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *endResultLabel = generateLabelSymbol(cg);
-
-   generateLabelInstruction(LABEL, node, startLabel, cg);
-   startLabel->setStartInternalControlFlow();
-
-   TR::RegisterDependencyConditions *deps = generateRegisterDependencyConditions((uint8_t) 0, 4, cg);
-   deps->addPostCondition(src1AddrRegister, TR::RealRegister::esi, cg);
-   deps->addPostCondition(src2AddrRegister, TR::RealRegister::edi, cg);
-   deps->addPostCondition(arrayLenRegister, TR::RealRegister::NoReg, cg);
-   deps->addPostCondition(resultRegister, TR::RealRegister::NoReg, cg);
-
-   //Setup
-   generateRegRegInstruction(MOVRegReg(), node, resultRegister, src1AddrRegister, cg);
-
-   //Use CMPSQ/CMPSD to compare the first N bytes of the array that are a multiple of 8/4
-   while (arrLen >= byteLen )
-      {
-      arrLen -= byteLen ;
-      generateInstruction(TR::Compiler->target.is64Bit() ? CMPSQ : CMPSD, node, deps, cg);
-      generateLabelInstruction(JNE4, node, backtrackLabel, cg);
-      }
-
-   //Residual
-   while (arrLen > 0)
-      {
-         arrLen--;
-         generateInstruction(CMPSB, node, deps, cg);
-         generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-
-   //Equal
-   generateRegRegInstruction(MOVRegReg(), node, resultRegister, arrayLenRegister, cg);
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-
-   //Inequality found, figure out which byte
-   generateLabelInstruction(LABEL, node, backtrackLabel, cg);
-   generateRegImmInstruction(SUBRegImm4(), node, src1AddrRegister, byteLen , cg);
-   generateRegImmInstruction(SUBRegImm4(), node, src2AddrRegister, byteLen , cg);
-
-   arrLen = byteLen ;
-   while (arrLen > 0)
-      {
-         arrLen--;
-         generateInstruction(CMPSB, node, deps, cg);
-         generateLabelInstruction(JNE4, node, notEqualLabel, cg);
-      }
-
-   //NotEqual
-   generateLabelInstruction(LABEL, node, notEqualLabel, cg);
-   generateRegInstruction(TR::Compiler->target.is64Bit() ? DEC8Reg : DEC4Reg, node, src1AddrRegister, cg);
-   generateRegRegInstruction(SUBRegReg(), node, src1AddrRegister, resultRegister, cg);
-   generateRegRegInstruction(MOVRegReg(), node, resultRegister, src1AddrRegister, cg);
-   generateLabelInstruction(JMP4, node, endResultLabel, cg);
-
-   //Result
-   cg->stopUsingRegister(src1AddrRegister);
-   cg->stopUsingRegister(src2AddrRegister);
-   cg->stopUsingRegister(arrayLenRegister);
-   deps->stopAddingConditions();
-
-   generateLabelInstruction(LABEL, node, endResultLabel, deps, cg);
-   endResultLabel->setEndInternalControlFlow();
-
-   node->setRegister(resultRegister);
-
-   cg->decReferenceCount(src1AddrNode);
-   cg->decReferenceCount(src2AddrNode );
-   cg->decReferenceCount(lengthNode );
-
-   return resultRegister;
-   }
-
 TR::Register *
 OMR::X86::TreeEvaluator::arraycmpEvaluator(
       TR::Node *node,
       TR::CodeGenerator *cg)
    {
-   TR::Register *resultRegister = NULL;
-
-   TR::Node *byteLenNode = node->getChild(2);
-
-   static bool repArrayCmpOpt = (feGetEnv("TR_NewArrayCompareOpt") != NULL);
-   static bool constLenArrayCmpOpt = (feGetEnv("TR_NoConstLenArrayCompareOpt") == NULL);
-   static char* maxLengthOfConstArrayStr = feGetEnv("TR_MaxLengthOfConstArray");
-   int32_t maxLengthOfConstArray = maxLengthOfConstArrayStr ? atoi(maxLengthOfConstArrayStr) : 32;
-   uintptrj_t arrLen;
-
-   //Array Rep
-   //
-   if (repArrayCmpOpt)
-      {
-      if (byteLenNode->getOpCode().isLoadConst() && constLenArrayCmpOpt)
-         {
-         arrLen = TR::TreeEvaluator::integerConstNodeValue(byteLenNode, cg);
-         if (arrLen <= maxLengthOfConstArray)
-            return node->isArrayCmpLen() ?  ConstLenArraycmpLenEvaluator(node, cg, arrLen) : ConstLenArraycmpEvaluator(node, cg, arrLen);
-         }
-      return node->isArrayCmpLen() ? REPArraycmpLenEvaluator(node, cg) : REPArraycmpEvaluator(node, cg);
-      }
-   // Exploit SSE4.2 SIMD instructions if they're available.
-   //
-   if (cg->getX86ProcessorInfo().supportsSSE2())
-      {
-      return node->isArrayCmpLen() ? TR::TreeEvaluator::SSE2ArraycmpLenEvaluator(node, cg) : TR::TreeEvaluator::SSE2ArraycmpEvaluator(node, cg);
-      }
-
-   TR::Node *src1AddrNode = node->getChild(0);
-   TR::Node *src2AddrNode = node->getChild(1);
-   TR::Node *lengthNode = node->getChild(2);
-
-   TR::Register *byteLenRegister = NULL;
-   TR::Register *condReg = NULL;
-   TR::Register *byteLenRemainingRegister = NULL;
-   TR::Register *condResultReg = NULL;
-
-   TR::LabelSymbol *startLabel = NULL;
-   TR::LabelSymbol *loopStartLabel = NULL;
-   TR::LabelSymbol *residueStartLabel = NULL;
-   TR::LabelSymbol *residueLoopStartLabel = NULL;
-   TR::LabelSymbol *residueEndLabel = NULL;
-   TR::LabelSymbol *resultLabel = NULL;
-   TR::LabelSymbol *result2Label = NULL;
-   TR::LabelSymbol *result3Label = NULL;
-
-   int32_t byteLen = 4;
-   if (TR::Compiler->target.is64Bit())
-      byteLen = 8;
-
-   TR::Register *src1AddrReg = TR::TreeEvaluator::intOrLongClobberEvaluate(src1AddrNode, TR::TreeEvaluator::getNodeIs64Bit(src1AddrNode, cg), cg);
-   TR::Register *src2AddrReg = TR::TreeEvaluator::intOrLongClobberEvaluate(src2AddrNode, TR::TreeEvaluator::getNodeIs64Bit(src2AddrNode, cg), cg);
-   byteLenRegister  = TR::TreeEvaluator::intOrLongClobberEvaluate(byteLenNode,  TR::TreeEvaluator::getNodeIs64Bit(byteLenNode, cg), cg);
-
-   byteLenRemainingRegister = cg->allocateRegister(TR_GPR);
-
-   generateRegRegInstruction(MOVRegReg(), node, byteLenRemainingRegister, byteLenRegister, cg);
-
-   startLabel = generateLabelSymbol(cg);
-   generateLabelInstruction(LABEL, node, startLabel, cg);
-
-   residueStartLabel = generateLabelSymbol(cg);
-   residueLoopStartLabel = generateLabelSymbol(cg);
-
-   generateRegRegInstruction(SUBRegReg(), node, src2AddrReg, src1AddrReg, cg);
-
-   generateRegImmInstruction(CMPRegImms(), node, byteLenRemainingRegister, byteLen, cg);
-   generateLabelInstruction(JL4, node, residueLoopStartLabel, cg);
-
-   generateRegImmInstruction(ADDRegImms(), node, byteLenRemainingRegister, -byteLen, cg);
-
-   loopStartLabel = generateLabelSymbol(cg);
-   generateLabelInstruction(LABEL, node, loopStartLabel, cg);
-
-   residueEndLabel = generateLabelSymbol(cg);
-   resultLabel = generateLabelSymbol(cg);
-   result2Label = generateLabelSymbol(cg);
-   result3Label = generateLabelSymbol(cg);
-   startLabel->setStartInternalControlFlow();
-
-   TR::Register *src1Reg = cg->allocateRegister(TR_GPR);
-   TR::Register *src2Reg = cg->allocateRegister(TR_GPR);
-
-   generateRegMemInstruction((byteLen == 4) ? L4RegMem : L8RegMem, node, src1Reg,
-                             generateX86MemoryReference(src1AddrReg, 0, cg), cg);
-
-   generateRegMemInstruction(CMPRegMem(), node, src1Reg, generateX86MemoryReference(src1AddrReg, src2AddrReg, 0, 0, cg), cg);
-   generateLabelInstruction(JNE4, node, residueStartLabel, cg);
-
-   generateRegImmInstruction(ADDRegImms(), node, src1AddrReg, byteLen, cg);
-   generateRegImmInstruction(ADDRegImms(), node, byteLenRemainingRegister, -byteLen, cg);
-
-   generateLabelInstruction(JGE4, node, loopStartLabel, cg);
-
-   generateLabelInstruction(LABEL, node, residueStartLabel, cg);
-   generateRegImmInstruction(ADDRegImms(), node, byteLenRemainingRegister, byteLen, cg);
-
-   generateRegImmInstruction(CMPRegImms(), node, byteLenRemainingRegister, 0, cg);
-   generateLabelInstruction(JE4, node, result3Label, cg);
-
-   generateLabelInstruction(LABEL, node, residueLoopStartLabel, cg);
-
-   generateRegMemInstruction((byteLen == 4) ? MOVZXReg4Mem1 : MOVZXReg8Mem1, node, src1Reg,
-                          generateX86MemoryReference(src1AddrReg, 0, cg), cg);
-   generateRegMemInstruction((byteLen == 4) ? MOVZXReg4Mem1 : MOVZXReg8Mem1, node, src2Reg,
-                          generateX86MemoryReference(src1AddrReg, src2AddrReg, 0, 0, cg), cg);
-
-   generateRegRegInstruction(CMPRegReg(), node, src1Reg, src2Reg, cg);
-   generateLabelInstruction(JNE4, node, result3Label, cg);
-
-   generateRegImmInstruction(ADDRegImms(), node, src1AddrReg, 1, cg);
-   generateRegImmInstruction(ADDRegImms(), node, byteLenRemainingRegister, -1, cg);
-   generateLabelInstruction(JG4, node, residueLoopStartLabel, cg);
-
-   generateLabelInstruction(LABEL, node, result3Label, cg);
-
-   generateRegRegInstruction(ADDRegReg(), node, src2AddrReg, src1AddrReg, cg);
-
-   generateLabelInstruction(LABEL, node, resultLabel, cg);
-
-   if (node->isArrayCmpLen())
-      {
-      generateRegRegInstruction(MOVRegReg(), node, src1Reg, byteLenRegister, cg);
-      generateRegRegInstruction(SUBRegReg(), node, src1Reg, byteLenRemainingRegister, cg);
-      resultRegister = src1Reg;
-      }
-   else
-      {
-      generateRegImmInstruction(CMPRegImms(), node, byteLenRemainingRegister, 0, cg);
-      generateLabelInstruction(JNE4, node, result2Label, cg);
-      generateRegImmInstruction(MOVRegImm4(), node, byteLenRemainingRegister, 0, cg);
-      generateLabelInstruction(JMP4, node, residueEndLabel, cg);
-      generateLabelInstruction(LABEL, node, result2Label, cg);
-      generateRegImmInstruction(MOVRegImm4(), node, byteLenRemainingRegister, 1, cg);
-      generateRegRegInstruction(CMPRegReg(), node, src1Reg, src2Reg, cg);
-      generateLabelInstruction(JL4, node, residueEndLabel, cg);
-      generateRegImmInstruction(MOVRegImm4(), node, byteLenRemainingRegister, 2, cg);
-      resultRegister = byteLenRemainingRegister;
-      }
-
-   TR::RegisterDependencyConditions *dependencies = generateRegisterDependencyConditions((uint8_t)0, 6, cg);
-   dependencies->addPostCondition(src1Reg, TR::RealRegister::NoReg, cg);
-   dependencies->addPostCondition(src2Reg, TR::RealRegister::NoReg, cg);
-   dependencies->addPostCondition(src1AddrReg, TR::RealRegister::NoReg, cg);
-   dependencies->addPostCondition(src2AddrReg, TR::RealRegister::NoReg, cg);
-   dependencies->addPostCondition(byteLenRemainingRegister, TR::RealRegister::NoReg, cg);
-   dependencies->addPostCondition(byteLenRegister, TR::RealRegister::NoReg, cg);
-
-   generateLabelInstruction(LABEL, node, residueEndLabel, dependencies, cg);
-   residueEndLabel->setEndInternalControlFlow();
-
-   node->setRegister(resultRegister);
-
-   if (src1Reg != resultRegister)
-      {
-      cg->stopUsingRegister(src1Reg);
-      }
-
-   cg->stopUsingRegister(src2Reg);
-   if ((byteLenRemainingRegister) && (byteLenRemainingRegister != resultRegister))
-      {
-      cg->stopUsingRegister(byteLenRemainingRegister);
-      }
-
-   cg->decReferenceCount(src1AddrNode);
-   cg->decReferenceCount(src2AddrNode);
-   cg->decReferenceCount(lengthNode);
-
-   cg->stopUsingRegister(src1AddrReg);
-   cg->stopUsingRegister(src2AddrReg);
-   cg->stopUsingRegister(byteLenRegister);
-
-   return resultRegister;
+   return node->isArrayCmpLen() ? TR::TreeEvaluator::SSE2ArraycmpLenEvaluator(node, cg) : TR::TreeEvaluator::SSE2ArraycmpEvaluator(node, cg);
    }
-
-TR::Register *OMR::X86::TreeEvaluator::SSE2IfArraycmpEvaluator(TR::Node *node, TR::LabelSymbol *targetLabel, bool branchonEqual, TR::CodeGenerator *cg)
-   {
-   TR::Node *s1AddrNode = node->getChild(0);
-   TR::Node *s2AddrNode = node->getChild(1);
-   TR::Node *lengthNode = node->getChild(2);
-
-   TR::LabelSymbol *startLabel = generateLabelSymbol(cg);
-   TR::LabelSymbol *qwordLoop = generateLabelSymbol(cg);
-   TR::LabelSymbol *qwordUnequal = generateLabelSymbol(cg);
-   TR::LabelSymbol *doneLabel = generateLabelSymbol(cg);
-
-   TR::Register *s1Reg = cg->gprClobberEvaluate(s1AddrNode, MOVRegReg());
-   TR::Register *s2Reg = cg->gprClobberEvaluate(s2AddrNode, MOVRegReg());
-   TR::Register *strLenReg = cg->gprClobberEvaluate(lengthNode, MOVRegReg());
-   TR::Register *equalTestReg = cg->allocateRegister(TR_GPR);
-   TR::Register *xmm1Reg = cg->allocateRegister(TR_FPR);
-   TR::Register *xmm2Reg = cg->allocateRegister(TR_FPR);
-   TR::Machine *machine = cg->machine();
-
-   startLabel->setStartInternalControlFlow();
-   doneLabel->setEndInternalControlFlow();
-
-   // s2 = s2-1
-   generateLabelInstruction(LABEL, node, startLabel, cg);
-   generateRegRegInstruction(SUBRegReg(), node, s2Reg, s1Reg, cg); // s2 = s2 - s1
-
-   // SSE loop body
-   generateLabelInstruction(LABEL, node, qwordLoop, cg);
-   generateRegMemInstruction(MOVUPSRegMem, node, xmm2Reg, generateX86MemoryReference(s1Reg, 0, cg), cg);
-   generateRegMemInstruction(MOVUPSRegMem, node, xmm1Reg, generateX86MemoryReference(s1Reg, s2Reg, 0, cg), cg);
-   generateRegRegInstruction(PCMPEQBRegReg, node, xmm1Reg, xmm2Reg, cg);
-   generateRegRegInstruction(PMOVMSKB4RegReg, node, equalTestReg, xmm1Reg, cg);
-   generateRegImmInstruction(XOR2RegImm2, node, equalTestReg, 0xffff, cg);
-
-   cg->stopUsingRegister(xmm1Reg);
-   cg->stopUsingRegister(xmm2Reg);
-
-   generateLabelInstruction(JNE4, node, qwordUnequal, cg);
-   generateRegImmInstruction(SUBRegImms(), node, strLenReg, 0x10, cg);
-   generateRegMemInstruction(LEARegMem(), node, s1Reg, generateX86MemoryReference(s1Reg, 0x10, cg), cg);
-
-   cg->stopUsingRegister(s1Reg);
-   cg->stopUsingRegister(s2Reg);
-
-   generateLabelInstruction(JG4, node, qwordLoop, cg);
-   if (branchonEqual)
-      generateLabelInstruction(JMP4, node, targetLabel, cg);
-   else
-      generateLabelInstruction(JMP4, node, doneLabel, cg);
-
-   // check compare results
-   generateLabelInstruction(LABEL, node, qwordUnequal, cg);
-   generateRegRegInstruction(BSF2RegReg, node, equalTestReg, equalTestReg, cg);
-   generateRegRegInstruction(CMPRegReg(), node, equalTestReg, strLenReg, cg);
-
-   cg->stopUsingRegister(strLenReg);
-   cg->stopUsingRegister(equalTestReg);
-
-   if (branchonEqual)
-      generateLabelInstruction(JGE4, node, targetLabel, cg);
-   else
-      generateLabelInstruction(JL4, node, targetLabel, cg);
-
-   TR::RegisterDependencyConditions *deps = generateRegisterDependencyConditions((uint8_t) 0, 6, cg);
-   deps->addPostCondition(xmm1Reg, TR::RealRegister::xmm1, cg);
-   deps->addPostCondition(xmm2Reg, TR::RealRegister::xmm2, cg);
-   deps->addPostCondition(s2Reg, TR::RealRegister::NoReg, cg);
-   deps->addPostCondition(s1Reg, TR::RealRegister::NoReg, cg);
-   deps->addPostCondition(strLenReg, TR::RealRegister::NoReg, cg);
-   deps->addPostCondition(equalTestReg, TR::RealRegister::NoReg, cg);
-
-
-   generateLabelInstruction(LABEL, node, doneLabel, deps, cg);
-
-   cg->decReferenceCount(s1AddrNode);
-   cg->decReferenceCount(s2AddrNode);
-   cg->decReferenceCount(lengthNode);
-
-   return NULL;
-   }
-
-
-
 
 TR::Register *OMR::X86::TreeEvaluator::SSE2ArraycmpEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
@@ -2443,17 +1831,15 @@ static void arrayCopy16BitPrimitive(TR::Node* node, TR::Register* dstReg, TR::Re
       generateRegMemInstruction(L2RegMem, node, sizeReg, generateX86MemoryReference(srcReg, 0, cg), cg);
       generateMemRegInstruction(S2MemReg, node, generateX86MemoryReference(dstReg, 0, cg), sizeReg, cg);
 
-      TR_OutlinedInstructions* backwardPath = new (cg->trHeapMemory()) TR_OutlinedInstructions(backwardLabel, cg);
-      cg->getOutlinedInstructionsList().push_front(backwardPath);
-      backwardPath->swapInstructionListsWithCompilation();
-      generateLabelInstruction(LABEL, node, backwardLabel, cg);
+      {
+      TR_OutlinedInstructionsGenerator og(backwardLabel, node, cg);
       generateRegMemInstruction(LEARegMem(), node, srcReg, generateX86MemoryReference(srcReg, sizeReg, 0, -2, cg), cg);
       generateRegMemInstruction(LEARegMem(), node, dstReg, generateX86MemoryReference(dstReg, sizeReg, 0, -2, cg), cg);
       generateInstruction(STD, node, cg);
       generateRepMovsInstruction(REPMOVSW, node, sizeReg, NULL, cg);
       generateInstruction(CLD, node, cg);
       generateLabelInstruction(JMP4, node, mainEndLabel, cg);
-      backwardPath->swapInstructionListsWithCompilation();
+      }
       }
    generateLabelInstruction(LABEL, node, mainEndLabel, dependencies, cg);
    }
@@ -2525,17 +1911,15 @@ static void arrayCopyDefault(TR::Node* node, uint8_t elementSize, TR::Register* 
       generateLabelInstruction(JB4, node, backwardLabel, cg);   // jb, skip backward copy setup
       generateRepMovsInstruction(repmovs, node, sizeReg, NULL, cg);
 
-      TR_OutlinedInstructions* backwardPath = new (cg->trHeapMemory()) TR_OutlinedInstructions(backwardLabel, cg);
-      cg->getOutlinedInstructionsList().push_front(backwardPath);
-      backwardPath->swapInstructionListsWithCompilation();
-      generateLabelInstruction(LABEL, node, backwardLabel, cg);
+      {
+      TR_OutlinedInstructionsGenerator og(backwardLabel, node, cg);
       generateRegMemInstruction(LEARegMem(), node, srcReg, generateX86MemoryReference(srcReg, sizeReg, 0, -(intptr_t)elementSize, cg), cg);
       generateRegMemInstruction(LEARegMem(), node, dstReg, generateX86MemoryReference(dstReg, sizeReg, 0, -(intptr_t)elementSize, cg), cg);
       generateInstruction(STD, node, cg);
       generateRepMovsInstruction(repmovs, node, sizeReg, NULL, cg);
       generateInstruction(CLD, node, cg);
       generateLabelInstruction(JMP4, node, mainEndLabel, cg);
-      backwardPath->swapInstructionListsWithCompilation();
+      }
 
       generateLabelInstruction(LABEL, node, mainEndLabel, dependencies, cg);
       }
@@ -3615,7 +2999,7 @@ static TR::Register * inlineSinglePrecisionSQRT(TR::Node *node, TR::CodeGenerato
       else
    targetRegister = cg->allocateSinglePrecisionRegister(TR_FPR);
 
-      generateRegRegInstruction(SQRTSFRegReg, node, targetRegister, opRegister, cg);
+      generateRegRegInstruction(SQRTSSRegReg, node, targetRegister, opRegister, cg);
     }
   else
     {
@@ -3643,20 +3027,30 @@ static TR::Register * inlineSinglePrecisionSQRT(TR::Node *node, TR::CodeGenerato
   return node->getRegister();
 }
 
-TR::Register* OMR::X86::TreeEvaluator::performSimpleAtomicMemoryUpdate(TR::Node* node, TR_X86OpCodes op, TR::CodeGenerator* cg)
+/** \brief
+ *    Generate instructions to do atomic memory update.
+ *
+ *  \param node
+ *     The tree node
+ *
+ *  \param op
+ *     The instruction op code to perform the memory update
+ *
+ *  \param cg
+ *     The code generator
+ */
+static TR::Register* inlineAtomicMemoryUpdate(TR::Node* node, TR_X86OpCodes op, TR::CodeGenerator* cg)
    {
    TR_ASSERT((!TR_X86OpCode(op).hasLongSource() && !TR_X86OpCode(op).hasLongTarget()) || TR::Compiler->target.is64Bit(), "64-bit instruction not supported on IA32");
    TR::Register* address = cg->evaluate(node->getChild(0));
-   TR::Register* value   = cg->evaluate(node->getChild(1));
-   TR::Register* result  = cg->allocateRegister();
+   TR::Register* value   = cg->gprClobberEvaluate(node->getChild(1), MOVRegReg());
 
-   generateRegRegInstruction(MOVRegReg(), node, result, value, cg);
-   generateMemRegInstruction(op, node, generateX86MemoryReference(address, 0, cg), result, cg);
+   generateMemRegInstruction(op, node, generateX86MemoryReference(address, 0, cg), value, cg);
 
-   node->setRegister(result);
+   node->setRegister(value);
    cg->decReferenceCount(node->getChild(0));
    cg->decReferenceCount(node->getChild(1));
-   return result;
+   return value;
    }
 
 // TR::icall, TR::acall, TR::lcall, TR::fcall, TR::dcall, TR::call handled by directCallEvaluator
@@ -3674,27 +3068,27 @@ TR::Register *OMR::X86::TreeEvaluator::directCallEvaluator(TR::Node *node, TR::C
       {
       if (comp->getSymRefTab()->isNonHelper(SymRef, TR::SymbolReferenceTable::atomicAdd32BitSymbol))
          {
-         return TR::TreeEvaluator::performSimpleAtomicMemoryUpdate(node, LADD4MemReg, cg);
+         return inlineAtomicMemoryUpdate(node, LADD4MemReg, cg);
          }
       if (comp->getSymRefTab()->isNonHelper(SymRef, TR::SymbolReferenceTable::atomicAdd64BitSymbol))
          {
-         return TR::TreeEvaluator::performSimpleAtomicMemoryUpdate(node, LADD8MemReg, cg);
+         return inlineAtomicMemoryUpdate(node, LADD8MemReg, cg);
          }
       if (comp->getSymRefTab()->isNonHelper(SymRef, TR::SymbolReferenceTable::atomicFetchAndAdd32BitSymbol))
          {
-         return TR::TreeEvaluator::performSimpleAtomicMemoryUpdate(node, LXADD4MemReg, cg);
+         return inlineAtomicMemoryUpdate(node, LXADD4MemReg, cg);
          }
       if (comp->getSymRefTab()->isNonHelper(SymRef, TR::SymbolReferenceTable::atomicFetchAndAdd64BitSymbol))
          {
-         return TR::TreeEvaluator::performSimpleAtomicMemoryUpdate(node, LXADD8MemReg, cg);
+         return inlineAtomicMemoryUpdate(node, LXADD8MemReg, cg);
          }
       if (comp->getSymRefTab()->isNonHelper(SymRef, TR::SymbolReferenceTable::atomicSwap32BitSymbol))
          {
-         return TR::TreeEvaluator::performSimpleAtomicMemoryUpdate(node, XCHG4MemReg, cg);
+         return inlineAtomicMemoryUpdate(node, XCHG4MemReg, cg);
          }
       if (comp->getSymRefTab()->isNonHelper(SymRef, TR::SymbolReferenceTable::atomicSwap64BitSymbol))
          {
-         return TR::TreeEvaluator::performSimpleAtomicMemoryUpdate(node, XCHG8MemReg, cg);
+         return inlineAtomicMemoryUpdate(node, XCHG8MemReg, cg);
          }
       }
 
@@ -4036,7 +3430,7 @@ TR::Register *OMR::X86::TreeEvaluator::BBStartEvaluator(TR::Node *node, TR::Code
          }
 
       if (node->getNumChildren() > 0)
-         inst = generateLabelInstruction(LABEL, node, label, node->getFirstChild(), &popRegisters, true, cg);
+         inst = generateLabelInstruction(LABEL, node, label, node->getFirstChild(), &popRegisters, cg);
       else
          inst = generateLabelInstruction(LABEL, node, node->getLabel(), true, cg);
 
@@ -4109,7 +3503,7 @@ TR::Register *OMR::X86::TreeEvaluator::BBEndEvaluator(TR::Node *node, TR::CodeGe
       {
       // We need to record the final state of the register associations at the end
       // of each extended basic block so that the register states and weights
-      // are initialised properly at the bottom of the block by the GP register
+      // are initialized properly at the bottom of the block by the GP register
       // assigner.
       //
       TR::Machine *machine = cg->machine();
@@ -4125,7 +3519,7 @@ TR::Register *OMR::X86::TreeEvaluator::BBEndEvaluator(TR::Node *node, TR::CodeGe
       // This label is also used by RegisterDependency to detect the end of a block.
       TR::Instruction *labelInst = NULL;
       if (node->getNumChildren() > 0)
-         labelInst = generateLabelInstruction(LABEL, node, generateLabelSymbol(cg), node->getFirstChild(), NULL, needVMThreadDep, cg);
+         labelInst = generateLabelInstruction(LABEL, node, generateLabelSymbol(cg), node->getFirstChild(), NULL, cg);
       else
          labelInst = generateLabelInstruction(LABEL, node, generateLabelSymbol(cg), needVMThreadDep, cg);
 
@@ -4222,7 +3616,7 @@ TR::Register *OMR::X86::TreeEvaluator::conversionAnalyser(TR::Node          *nod
                child->getOpCode().isLoadIndirect() &&
                child->getSymbolReference()->getSymbol()->getDataType() == TR::Address)
             {
-            targetRegister = TR::TreeEvaluator::iloadEvaluator(child, cg);
+            targetRegister = cg->evaluate(child);
             }
          else
             {
@@ -4703,18 +4097,6 @@ OMR::X86::TreeEvaluator::VMinlineCallEvaluator(TR::Node*, bool, TR::CodeGenerato
    }
 
 TR::Register *
-OMR::X86::TreeEvaluator::VMifInstanceOfEvaluator(TR::Node*, TR::CodeGenerator*)
-   {
-   return 0;
-   }
-
-TR::Register *
-OMR::X86::TreeEvaluator::VMifArrayCmpEvaluator(TR::Node*, TR::CodeGenerator*)
-   {
-   return 0;
-   }
-
-TR::Register *
 OMR::X86::TreeEvaluator::ibyteswapEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
    TR_ASSERT(node->getNumChildren() == 1, "Wrong number of children in byteswapEvaluator");
@@ -4740,7 +4122,7 @@ enum BinaryArithmeticOps : uint32_t
    NumBinaryArithmeticOps
    };
 
-static const TR_X86OpCodes BinaryArithmeticOpCodes[TR::NumOMRTypes][NumBinaryArithmeticOps] =
+static const TR_X86OpCodes BinaryArithmeticOpCodesForReg[TR::NumOMRTypes][NumBinaryArithmeticOps] =
    {
    //  Invalid,       Add,         Sub,         Mul,         Div,          And,         Or,       Xor
    { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // NoType
@@ -4748,16 +4130,55 @@ static const TR_X86OpCodes BinaryArithmeticOpCodes[TR::NumOMRTypes][NumBinaryAri
    { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Int16
    { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Int32
    { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Int64
-   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Float
-   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Double
+   { BADIA32Op, ADDSSRegReg, SUBSSRegReg, MULSSRegReg,  DIVSSRegReg, BADIA32Op,  BADIA32Op, BADIA32Op  }, // Float
+   { BADIA32Op, ADDSDRegReg, SUBSDRegReg, MULSDRegReg,  DIVSDRegReg, BADIA32Op,  BADIA32Op, BADIA32Op  }, // Double
    { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Address
-   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorInt8
-   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorInt16
+   { BADIA32Op, PADDBRegReg, PSUBBRegReg, BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorInt8
+   { BADIA32Op, PADDWRegReg, PSUBWRegReg, PMULLWRegReg, BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorInt16
    { BADIA32Op, PADDDRegReg, PSUBDRegReg, PMULLDRegReg, BADIA32Op,   PANDRegReg, PORRegReg, PXORRegReg }, // VectorInt32
    { BADIA32Op, PADDQRegReg, PSUBQRegReg, BADIA32Op,    BADIA32Op,   PANDRegReg, PORRegReg, PXORRegReg }, // VectorInt64
    { BADIA32Op, ADDPSRegReg, SUBPSRegReg, MULPSRegReg,  DIVPSRegReg, BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorFloat
    { BADIA32Op, ADDPDRegReg, SUBPDRegReg, MULPDRegReg,  DIVPDRegReg, BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorDouble
    { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Aggregate
+   };
+
+static const TR_X86OpCodes BinaryArithmeticOpCodesForMem[TR::NumOMRTypes][NumBinaryArithmeticOps] =
+   {
+   //  Invalid,       Add,         Sub,         Mul,         Div,          And,         Or,       Xor
+   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // NoType
+   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Int8
+   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Int16
+   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Int32
+   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Int64
+   { BADIA32Op, ADDSSRegMem, SUBSSRegMem, MULSSRegMem,  DIVSSRegMem, BADIA32Op,  BADIA32Op, BADIA32Op  }, // Float
+   { BADIA32Op, ADDSDRegMem, SUBSDRegMem, MULSDRegMem,  DIVSDRegMem, BADIA32Op,  BADIA32Op, BADIA32Op  }, // Double
+   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Address
+   { BADIA32Op, PADDBRegMem, PSUBBRegMem, BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorInt8
+   { BADIA32Op, PADDWRegMem, PSUBWRegMem, PMULLWRegMem, BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorInt16
+   { BADIA32Op, PADDDRegMem, PSUBDRegMem, PMULLDRegMem, BADIA32Op,   PANDRegMem, PORRegMem, PXORRegMem }, // VectorInt32
+   { BADIA32Op, PADDQRegMem, PSUBQRegMem, BADIA32Op,    BADIA32Op,   PANDRegMem, PORRegMem, PXORRegMem }, // VectorInt64
+   { BADIA32Op, ADDPSRegMem, SUBPSRegMem, MULPSRegMem,  DIVPSRegMem, BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorFloat
+   { BADIA32Op, ADDPDRegMem, SUBPDRegMem, MULPDRegMem,  DIVPDRegMem, BADIA32Op,  BADIA32Op, BADIA32Op  }, // VectorDouble
+   { BADIA32Op, BADIA32Op,   BADIA32Op,   BADIA32Op,    BADIA32Op,   BADIA32Op,  BADIA32Op, BADIA32Op  }, // Aggregate
+   };
+
+static const TR::ILOpCodes MemoryLoadOpCodes[TR::NumOMRTypes] =
+   {
+   TR::BadILOp, // NoType
+   TR::BadILOp, // Int8
+   TR::BadILOp, // Int16
+   TR::BadILOp, // Int32
+   TR::BadILOp, // Int64
+   TR::fload  , // Float
+   TR::dload  , // Double
+   TR::BadILOp, // Address
+   TR::vload  , // VectorInt8
+   TR::vload  , // VectorInt16
+   TR::vload  , // VectorInt32
+   TR::vload  , // VectorInt64
+   TR::vload  , // VectorFloat
+   TR::vload  , // VectorDouble
+   TR::BadILOp, // Aggregate
    };
 
 // For ILOpCode that can be translated to single SSE/AVX instructions
@@ -4767,15 +4188,23 @@ TR::Register* OMR::X86::TreeEvaluator::FloatingPointAndVectorBinaryArithmeticEva
 
    switch (node->getOpCodeValue())
       {
+      case TR::fadd:
+      case TR::dadd:
       case TR::vadd:
          arithmetic = BinaryArithmeticAdd;
          break;
+      case TR::fsub:
+      case TR::dsub:
       case TR::vsub:
          arithmetic = BinaryArithmeticSub;
          break;
+      case TR::fmul:
+      case TR::dmul:
       case TR::vmul:
          arithmetic = BinaryArithmeticMul;
          break;
+      case TR::fdiv:
+      case TR::ddiv:
       case TR::vdiv:
          arithmetic = BinaryArithmeticDiv;
          break;
@@ -4792,21 +4221,50 @@ TR::Register* OMR::X86::TreeEvaluator::FloatingPointAndVectorBinaryArithmeticEva
          TR_ASSERT(false, "Unsupported OpCode");
       }
 
+   TR::DataType type = node->getDataType();
+
    TR::Node* operandNode0 = node->getChild(0);
    TR::Node* operandNode1 = node->getChild(1);
+
+   bool useRegMemForm = TR::CodeGenerator::getX86ProcessorInfo().supportsAVX();
+
+   if (useRegMemForm)
+      {
+      if (operandNode1->getReferenceCount() != 1 ||
+          operandNode1->getOpCodeValue() != MemoryLoadOpCodes[type] ||
+          BinaryArithmeticOpCodesForMem[type][arithmetic] == BADIA32Op)
+         {
+         useRegMemForm = false;
+         }
+      }
+
    TR::Register* operandReg0 = cg->evaluate(operandNode0);
-   TR::Register* operandReg1 = cg->evaluate(operandNode1);
-
+   TR::Register* operandReg1 = useRegMemForm ? NULL : cg->evaluate(operandNode1);
    TR::Register* resultReg = cg->allocateRegister(operandReg0->getKind());
-   generateRegRegInstruction(MOVDQURegReg, node, resultReg, operandReg0, cg);
+   resultReg->setIsSinglePrecision(operandReg0->isSinglePrecision());
 
-   TR_X86OpCodes opCode = BinaryArithmeticOpCodes[node->getDataType()][arithmetic];
+   TR_X86OpCodes opCode = useRegMemForm ? BinaryArithmeticOpCodesForMem[type][arithmetic] : BinaryArithmeticOpCodesForReg[type][arithmetic];
    TR_ASSERT(opCode != BADIA32Op, "FloatingPointAndVectorBinaryArithmeticEvaluator: unsupported data type or arithmetic.");
-   generateRegRegInstruction(opCode, node, resultReg, operandReg1, cg);
+
+   if (TR::CodeGenerator::getX86ProcessorInfo().supportsAVX())
+      {
+      if (useRegMemForm)
+         generateRegRegMemInstruction(opCode, node, resultReg, operandReg0, generateX86MemoryReference(operandNode1, cg), cg);
+      else
+         generateRegRegRegInstruction(opCode, node, resultReg, operandReg0, operandReg1, cg);
+      }
+   else
+      {
+      generateRegRegInstruction(MOVDQURegReg, node, resultReg, operandReg0, cg);
+      generateRegRegInstruction(opCode, node, resultReg, operandReg1, cg);
+      }
 
    node->setRegister(resultReg);
    cg->decReferenceCount(operandNode0);
-   cg->decReferenceCount(operandNode1);
+   if (operandReg1)
+      cg->decReferenceCount(operandNode1);
+   else
+      cg->recursivelyDecReferenceCount(operandNode1);
    return resultReg;
    }
 

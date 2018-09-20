@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -224,14 +224,16 @@ public:
 #if defined(J9X86)
 		asm volatile("lock orl $0x0,(%%esp)" ::: "memory");
 #elif defined(J9HAMMER)
-		asm volatile("lock orq $0x0,(%%rsp)" ::: "memory");
+		asm volatile("lock orl $0x0,(%%rsp)" ::: "memory");
 #elif defined(ARM) /* defined(J9HAMMER) */
 		__sync_synchronize();
-#elif defined(S390) /* defined(ARM) */
+#elif defined(AARCH64) /* defined(ARM) */
+		__asm __volatile ("dmb ish":::"memory");
+#elif defined(S390) /* defined(AARCH64) */
 		asm volatile("bcr 15,0":::"memory");
 #else /* defined(S390) */
 		asm volatile("":::"memory");
-#endif /* defined(J9X86) || defined(J9HAMMER) */
+#endif /* defined(J9X86) */
 #elif defined(J9ZOS390)
 		/* Replace this with an inline "bcr 15,0" whenever possible */
 		__fence();
@@ -251,22 +253,20 @@ public:
 	VMINLINE static void
 	writeBarrier()
 	{
+	/* Neither x86 nor S390 require a write barrier - the compiler fence is sufficient */
 #if !defined(ATOMIC_SUPPORT_STUB)
 #if defined(AIXPPC) || defined(LINUXPPC)
 		__lwsync();
 #elif defined(_MSC_VER)
 		_ReadWriteBarrier();
 #elif defined(__GNUC__)
-#if defined(J9X86) || defined(J9HAMMER)
-		asm volatile("":::"memory");
-		/* TODO investigate whether or not we should call this
-		asm volatile("sfence" ::: "memory");
-		*/
-#elif defined(ARM) /* defined(J9X86) || defined(J9HAMMER) */
+#if defined(ARM)
 		__sync_synchronize();
-#else /* defined(ARM) */
+#elif defined(AARCH64) /* defined(ARM) */
+		__asm __volatile ("dmb ishst":::"memory");
+#else /* defined(AARCH64) */
 		asm volatile("":::"memory");
-#endif /* defined(J9X86) || defined(J9HAMMER) */
+#endif /* defined(ARM) */
 #elif defined(J9ZOS390)
 		__fence();
 #endif /* defined(AIXPPC) || defined(LINUXPPC) */
@@ -283,33 +283,20 @@ public:
 	VMINLINE static void
 	readBarrier()
 	{
+	/* Neither x86 nor S390 require a read barrier - the compiler fence is sufficient */
 #if !defined(ATOMIC_SUPPORT_STUB)
 #if defined(AIXPPC) || defined(LINUXPPC)
 		__isync();
 #elif defined(_MSC_VER)
 		_ReadWriteBarrier();
-#if defined(J9HAMMER)
-		__faststorefence();
-#else /* J9HAMMER */
-		__asm { lock or dword ptr [esp],0 }
-#endif /* J9HAMMER */
-		_ReadWriteBarrier();
 #elif defined(__GNUC__)
-#if defined(J9X86)
-		asm volatile("lock orl $0x0,(%%esp)" ::: "memory");
-		/* TODO investigate whether or not we should call this instead
-		asm volatile("lfence":::"memory");
-		*/
-#elif defined(J9HAMMER)
-		asm volatile("lock orq $0x0,(%%rsp)" ::: "memory");
-		/* TODO investigate whether or not we should call this instead
-		asm volatile("lfence":::"memory");
-		*/
-#elif defined(ARM) /* defined(J9HAMMER) */
+#if defined(ARM)
 		__sync_synchronize();
-#else /* defined(ARM) */
+#elif defined(AARCH64) /* defined(ARM) */
+		__asm __volatile ("dmb ishld":::"memory");
+#else /* defined(AARCH64) */
 		asm volatile("":::"memory");
-#endif /* defined(J9X86) || defined(J9HAMMER) */
+#endif /* defined(ARM) */
 #elif defined(J9ZOS390)
 		__fence();
 #endif /* defined(AIXPPC) || defined(LINUXPPC) */

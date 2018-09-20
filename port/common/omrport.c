@@ -219,6 +219,9 @@ static OMRPortLibrary MasterPortLibraryTable = {
 	omrsig_set_single_async_signal_handler, /* sig_set_single_async_signal_handler */
 	omrsig_map_os_signal_to_portlib_signal, /* sig_map_os_signal_to_portlib_signal */
 	omrsig_map_portlib_signal_to_os_signal, /* sig_map_portlib_signal_to_os_signal */
+	omrsig_register_os_handler, /* sig_register_os_handler */
+	omrsig_is_master_signal_handler, /* sig_is_master_signal_handler */
+	omrsig_is_signal_ignored, /* sig_is_signal_ignored */
 	omrsig_info, /* sig_info */
 	omrsig_info_count, /* sig_info_count */
 	omrsig_set_options, /* sig_set_options */
@@ -254,7 +257,7 @@ static OMRPortLibrary MasterPortLibraryTable = {
 	omrsysinfo_get_number_CPUs_by_type, /* sysinfo_get_number_CPUs_by_type */
 	omrsysinfo_get_cwd, /* sysinfo_get_cwd */
 	omrsysinfo_get_tmp, /* sysinfo_get_tmp */
-	omrsysinfo_set_number_entitled_CPUs, /* sysinfo_set_number_entitled_CPUs */
+	omrsysinfo_set_number_user_specified_CPUs, /* sysinfo_set_number_user_specified_CPUs */
 	omrsysinfo_get_open_file_count, /* sysinfo_get_open_file_count */
 	omrsysinfo_get_os_description, /* sysinfo_get_os_description */
 	omrsysinfo_os_has_feature, /* sysinfo_os_has_feature */
@@ -266,6 +269,10 @@ static OMRPortLibrary MasterPortLibraryTable = {
 	omrsysinfo_cgroup_enable_subsystems, /* sysinfo_cgroup_enable_subsystems */
 	omrsysinfo_cgroup_are_subsystems_enabled, /* sysinfo_cgroup_are_subsystems_enabled */
 	omrsysinfo_cgroup_get_memlimit, /* sysinfo_cgroup_get_memlimit */
+	omrsysinfo_cgroup_is_memlimit_set, /* sysinfo_cgroup_is_memlimit_set */
+	omrsysinfo_cgroup_get_handle_subsystem_file, /* sysinfo_cgroup_get_handle_subsystem_file */
+	omrsysinfo_get_cgroup_subsystem_list, /* sysinfo_get_cgroup_entry_list */
+	omrsysinfo_is_running_in_container, /* sysinfo_is_running_in_container */
 	omrport_init_library, /* port_init_library */
 	omrport_startup_library, /* port_startup_library */
 	omrport_create_library, /* port_create_library */

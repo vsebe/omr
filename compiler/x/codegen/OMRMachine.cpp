@@ -174,7 +174,6 @@ OMR::X86::Machine::Machine
    uint8_t numIntRegs,
    uint8_t numFPRegs,
    TR::CodeGenerator *cg,
-   TR::RealRegister **registerFile,
    TR::Register **registerAssociations,
    uint8_t numGlobalGPRs,
    uint8_t numGlobal8BitGPRs,
@@ -182,18 +181,17 @@ OMR::X86::Machine::Machine
    TR::Register **xmmGlobalRegisters,
    uint32_t *globalRegisterNumberToRealRegisterMap
    )
-   : OMR::Machine(numIntRegs, numFPRegs),
-   _cg(cg),
-   _registerFile(registerFile),
+   : OMR::Machine(cg),
    _registerAssociations(registerAssociations),
    _numGlobalGPRs(numGlobalGPRs),
    _numGlobal8BitGPRs(numGlobal8BitGPRs),
    _numGlobalFPRs(numGlobalFPRs),
    _xmmGlobalRegisters(xmmGlobalRegisters),
    _globalRegisterNumberToRealRegisterMap(globalRegisterNumberToRealRegisterMap),
-   _spilledRegistersList(NULL)
+   _spilledRegistersList(NULL),
+   _numGPRs(numIntRegs)
    {
-   self()->initialiseFPStackRegisterFile();
+   self()->initializeFPStackRegisterFile();
    _fpTopOfStack = TR_X86FPStackRegister::fpStackEmpty;
    self()->resetFPStackRegisters();
    self()->resetXMMGlobalRegisters();
@@ -812,8 +810,7 @@ TR::RealRegister *OMR::X86::Machine::freeBestGPRegister(TR::Instruction         
          {
          if (info->getDataType() == TR_RematerializableFloat)
             {
-            TR::IA32ConstantDataSnippet *cds = self()->cg()->findOrCreate4ByteConstant(currentInstruction->getNode(), info->getConstant());
-            TR::MemoryReference  *tempMR = generateX86MemoryReference(cds, self()->cg());
+            TR::MemoryReference* tempMR = generateX86MemoryReference(self()->cg()->findOrCreate4ByteConstant(currentInstruction->getNode(), info->getConstant()), self()->cg());
             instr = generateRegMemInstruction(currentInstruction, MOVSSRegMem, best, tempMR, self()->cg());
 #ifdef DEBUG
             self()->cg()->incNumRematerializedXMMRs();
@@ -1581,7 +1578,7 @@ OMR::X86::Machine::createRegisterAssociationDirective(TR::Instruction *cursor)
 #define UNUSED_WEIGHT       0xFFFF
 
 void
-OMR::X86::Machine::initialiseRegisterFile(const struct TR::X86LinkageProperties &properties)
+OMR::X86::Machine::initializeRegisterFile(const struct TR::X86LinkageProperties &properties)
    {
    int reg;
 
@@ -1722,7 +1719,7 @@ OMR::X86::Machine::getGlobalRegisterTable(const struct TR::X86LinkageProperties&
 TR::RealRegister **
 OMR::X86::Machine::cloneRegisterFile(TR::RealRegister **registerFile, TR_AllocationKind allocKind)
    {
-   int32_t arraySize = sizeof(TR::RealRegister *)*TR_X86_REGISTER_FILE_SIZE;
+   int32_t arraySize = sizeof(TR::RealRegister *) * TR::RealRegister::NumRegisters;
    TR::RealRegister  **registerFileClone = (TR::RealRegister **)self()->cg()->trMemory()->allocateMemory(arraySize, allocKind);
    int32_t i = 0;
    int32_t endReg = TR::RealRegister::LastAssignableGPR;
@@ -1875,7 +1872,7 @@ TR::RegisterDependencyConditions * OMR::X86::Machine::createCondForLiveAndSpille
 //
 TR::RealRegister **OMR::X86::Machine::captureRegisterFile()
    {
-   int32_t arraySize = sizeof(TR::RealRegister *) * TR_X86_REGISTER_FILE_SIZE;
+   int32_t arraySize = sizeof(TR::RealRegister *) * TR::RealRegister::NumRegisters;
 
    TR::RealRegister **registerFileClone =
       (TR::RealRegister **)self()->cg()->trMemory()->allocateMemory(arraySize, heapAlloc);
@@ -1950,7 +1947,7 @@ void OMR::X86::Machine::installRegisterFile(TR::RealRegister **registerFileCopy)
 
 TR::Register **OMR::X86::Machine::captureRegisterAssociations()
    {
-   int32_t arraySize = sizeof(TR::Register *) * TR_X86_REGISTER_FILE_SIZE;
+   int32_t arraySize = sizeof(TR::Register *) * TR::RealRegister::NumRegisters;
 
    TR::Register **registerAssociationsClone =
       (TR::Register **)self()->cg()->trMemory()->allocateMemory(arraySize, heapAlloc);
@@ -2017,7 +2014,7 @@ TR_RegisterAssignerState::createDependenciesFromRegisterState(TR_OutlinedInstruc
 
    numDeps += _spilledRegistersList->size();
 
-   if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+   if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
       {
       traceMsg(comp, "createDependenciesFromRegisterState : %d live registers: %d assigned, %d spilled\n",
          numDeps,
@@ -2057,7 +2054,7 @@ TR_RegisterAssignerState::createDependenciesFromRegisterState(TR_OutlinedInstruc
                      {
                      virtReg->decTotalUseCount((*iter)->useCount);
 
-                     if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+                     if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
                         {
                         traceMsg(comp, "Adjusting up register use counts of reg %p (fuc=%d:tuc=%d:mergeFuc=%d) by %d\n",
                         		(*iter)->virtReg, (*iter)->virtReg->getFutureUseCount(), (*iter)->virtReg->getTotalUseCount(), (*iter)->mergeFuc, (*iter)->useCount);
@@ -2078,7 +2075,7 @@ TR_RegisterAssignerState::createDependenciesFromRegisterState(TR_OutlinedInstruc
          //
          virtReg->incFutureUseCount();
 
-         if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+         if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
             {
             traceMsg(comp, "   create ASSIGNED dependency: virtual %p -> %s\n",
                virtReg,
@@ -2102,7 +2099,7 @@ TR_RegisterAssignerState::createDependenciesFromRegisterState(TR_OutlinedInstruc
       //
       (*iter)->incFutureUseCount();
 
-      if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+      if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
          {
          traceMsg(comp, "   create SPILLED dependency: virtual %p -> backing storage %p\n",
         		 *iter,
@@ -2178,7 +2175,7 @@ void TR_RegisterAssignerState::dump()
    {
    TR::Compilation *comp = _machine->cg()->comp();
 
-   if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+   if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
       {
       traceMsg(comp, "\nREGISTER ASSIGNER STATE\n=======================\n\nAssigned Live Registers:\n");
 
@@ -2209,7 +2206,7 @@ void OMR::X86::Machine::adjustRegisterUseCountsUp(TR::list<OMR::RegisterUsage*> 
    TR::Compilation *comp = self()->cg()->comp();
    for(auto iter = rul->begin(); iter != rul->end(); ++iter)
       {
-      if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+      if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
          {
          traceMsg(comp, "Adjusting UP register use counts of reg %p (fuc=%d:tuc=%d:adjustFuture=%d) by %d -> ",
         		 (*iter)->virtReg, (*iter)->virtReg->getFutureUseCount(), (*iter)->virtReg->getTotalUseCount(), adjustFuture, (*iter)->useCount);
@@ -2220,7 +2217,7 @@ void OMR::X86::Machine::adjustRegisterUseCountsUp(TR::list<OMR::RegisterUsage*> 
       if (adjustFuture)
     	  (*iter)->virtReg->incFutureUseCount((*iter)->useCount);
 
-      if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+      if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
          {
          traceMsg(comp, "(fuc=%d:tuc=%d)\n", (*iter)->virtReg->getFutureUseCount(), (*iter)->virtReg->getTotalUseCount());
          }
@@ -2235,7 +2232,7 @@ void OMR::X86::Machine::adjustRegisterUseCountsDown(TR::list<OMR::RegisterUsage*
 
    for(auto iter = rul->begin(); iter != rul->end(); ++iter)
       {
-      if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+      if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
          {
          traceMsg(comp, "Adjusting DOWN register use counts of reg %p (fuc=%d:tuc=%d:adjustFuture=%d) by %d -> ",
         		 (*iter)->virtReg, (*iter)->virtReg->getFutureUseCount(), (*iter)->virtReg->getTotalUseCount(), adjustFuture, (*iter)->useCount);
@@ -2246,7 +2243,7 @@ void OMR::X86::Machine::adjustRegisterUseCountsDown(TR::list<OMR::RegisterUsage*
       if (adjustFuture)
     	  (*iter)->virtReg->decFutureUseCount((*iter)->useCount);
 
-      if (comp->getOptions()->getOption(TR_TraceNonLinearRegisterAssigner))
+      if (comp->getOption(TR_TraceNonLinearRegisterAssigner))
          {
          traceMsg(comp, "(fuc=%d:tuc=%d)\n", (*iter)->virtReg->getFutureUseCount(), (*iter)->virtReg->getTotalUseCount());
          }
@@ -2373,7 +2370,7 @@ void OMR::X86::Machine::resetFPStackRegisters()
    }
 
 
-void OMR::X86::Machine::initialiseFPStackRegisterFile()
+void OMR::X86::Machine::initializeFPStackRegisterFile()
    {
    _fpStack[TR_X86FPStackRegister::fp0] = new (self()->cg()->trHeapMemory()) TR_X86FPStackRegister(TR_X86FPStackRegister::Free,
                                                                     TR_X86FPStackRegister::fp0,

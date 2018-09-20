@@ -84,7 +84,7 @@ class OMR_EXTENSIBLE MemoryReference : public OMR::X86::MemoryReference
 
    MemoryReference(TR::Register *br, TR::Register *ir, uint8_t s, intptrj_t disp, TR::CodeGenerator *cg);
 
-   MemoryReference(TR::IA32DataSnippet *cds, TR::CodeGenerator *cg);
+   MemoryReference(TR::X86DataSnippet *cds, TR::CodeGenerator *cg);
 
    MemoryReference(TR::LabelSymbol    *label, TR::CodeGenerator *cg);
 
@@ -114,7 +114,7 @@ class OMR_EXTENSIBLE MemoryReference : public OMR::X86::MemoryReference
       OMR::X86::MemoryReference::unblockRegisters();
       }
 
-   void addMetaDataForCodeAddressWithLoad(uint8_t *displacementLocation, TR::Instruction *containingInstruction, TR::CodeGenerator *cg);
+   void addMetaDataForCodeAddressWithLoad(uint8_t *displacementLocation, TR::Instruction *containingInstruction, TR::CodeGenerator *cg, TR::SymbolReference *srCopy);
    void addMetaDataForCodeAddressDisplacementOnly(intptrj_t displacement, uint8_t *cursor, TR::CodeGenerator *cg);
 
    protected:

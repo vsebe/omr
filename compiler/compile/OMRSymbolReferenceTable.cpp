@@ -1303,11 +1303,18 @@ OMR::SymbolReferenceTable::findOrCreateClassSymbol(
    sym->setClassObject();
 
 #ifdef J9_PROJECT_SPECIFIC
-   TR_J9VMBase *fej9 = (TR_J9VMBase *)(comp()->fe());
-   if (fej9->getSupportsRecognizedMethods())
-   {
-   TR_ASSERT(cpIndex != -1 || !comp()->compileRelocatableCode() , "we missed one of the cases where enabling recognized methods triggers a creation of a classSymbol with CPI of -1");
-   }
+   if (cpIndex == -1 && comp()->compileRelocatableCode())
+      {
+      // Restricting TR_ArbitraryClassAddress to classes loaded by the
+      // bootstrap loader ensures that there is no ambiguity when correlating
+      // the class on AOT load.
+      TR_J9VMBase *fej9 = (TR_J9VMBase *)(comp()->fe());
+      void *loader = fej9->getClassLoader((TR_OpaqueClassBlock*)classObject);
+      void *bootstrapLoader = TR::Compiler->javaVM->systemClassLoader;
+      TR_ASSERT_FATAL(
+         loader == bootstrapLoader,
+         "class symref cpIndex=-1 in AOT not loaded by bootstrap loader\n");
+      }
 #endif
 
    if (cpIndexOfStatic)
@@ -1335,7 +1342,7 @@ OMR::SymbolReferenceTable::findOrCreateClassSymbol(
 
 TR::SymbolReference *
 OMR::SymbolReferenceTable::findOrCreateCPSymbol(
-   TR::ResolvedMethodSymbol * owningMethodSymbol, int32_t cpIndex, TR::DataType dataType, bool resolved, void * dataAddress)
+   TR::ResolvedMethodSymbol * owningMethodSymbol, int32_t cpIndex, TR::DataType dataType, bool resolved, void * dataAddress, TR::KnownObjectTable::Index knownObjectIndex)
    {
    TR::StaticSymbol *sym;
    TR_SymRefIterator i(aliasBuilder.cpConstantSymRefs(), self());
@@ -1368,7 +1375,7 @@ OMR::SymbolReferenceTable::findOrCreateCPSymbol(
    sym = TR::StaticSymbol::create(trHeapMemory(),dataType);
    int32_t unresolvedIndex = resolved ? 0 : _numUnresolvedSymbols++;
 
-   symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), cpIndex, unresolvedIndex);
+   symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), cpIndex, unresolvedIndex, knownObjectIndex);
 
    if (resolved)
       sym->setStaticAddress(dataAddress);
@@ -1792,6 +1799,7 @@ OMR::SymbolReferenceTable::findOrCreateCounterSymRef(char *name, TR::DataType d,
    // No match
    //
    TR::StaticSymbol * sym = TR::StaticSymbol::createNamed(trHeapMemory(), d,address,name);
+   sym->setNotDataAddress();
    result = new (trHeapMemory()) TR::SymbolReference(self(),sym);
    _debugCounterSymbolRefs.add(result);
    return result;

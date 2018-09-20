@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2017, 2017 IBM Corp. and others
+# Copyright (c) 2017, 2018 IBM Corp. and others
 #
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -23,19 +23,41 @@ set(OMR_WARNINGS_AS_ERRORS ON CACHE BOOL "Treat compile warnings as errors")
 set(OMR_ENHANCED_WARNINGS ON CACHE BOOL "Enable enhanced compiler warnings")
 
 ###
+### Built-in OMR Applications
+###
+
+set(OMR_EXAMPLE ON CACHE BOOL "Enable the Example application")
+
+###
 ### Major Feature Flags
 ###
 
 set(OMR_COMPILER OFF CACHE BOOL "Enable the compiler")
 set(OMR_DDR OFF CACHE BOOL "Enable DDR")
-set(OMR_FVTEST OFF CACHE BOOL "Enable the FV Testing.")
+set(OMR_FVTEST ON CACHE BOOL "Enable the FV Testing.")
 set(OMR_GC ON CACHE BOOL "Enable the GC")
+set(OMR_JIT OFF CACHE BOOL "Enable building the JIT compiler")
 set(OMR_JITBUILDER OFF CACHE BOOL "Enable building JitBuilder")
 set(OMR_OMRSIG ON CACHE BOOL "Enable the OMR signal compatibility library")
 set(OMR_PORT ON CACHE BOOL "Enable portability library")
 set(OMR_TEST_COMPILER OFF CACHE BOOL "Enable building the test compiler")
 set(OMR_THREAD ON CACHE BOOL "Enable thread library")
 set(OMR_TOOLS ON CACHE BOOL "Enable the native build tools")
+set(OMR_RAS_TDF_TRACE ON CACHE BOOL "Enable trace engine")
+
+## OMR_JIT is required for OMR_JITBUILDER and OMR_TEST_COMPILER
+if(OMR_JITBUILDER OR OMR_TEST_COMPILER)
+	set(OMR_JIT ON CACHE BOOL "" FORCE)
+endif()
+
+## Enable OMR_JITBUILDER_TEST if OMR_JITBUILDER AND OMR_ENV_DATA64 are enabled.
+## Do NOT force it since it is explicitly disabled on Windows for now.
+if(OMR_JITBUILDER)
+	set(OMR_JITBUILDER_TEST ON CACHE BOOL "")
+else()
+    # if JitBuilder isn't enabled, the tests can't be built
+    set(OMR_JITBUILDER_TEST OFF CACHE BOOL "" FORCE)
+endif()
 
 ###
 ### Tooling
@@ -54,6 +76,15 @@ set(OMR_HOOK_LIB "j9hookstatic" CACHE STRING "Name of the hook library to link a
 set(OMR_PORT_LIB "omrport" CACHE STRING "Name of the port library to link against")
 set(OMR_THREAD_LIB "j9thrstatic" CACHE STRING "Name of the thread library to link against")
 set(OMR_TRACE_LIB "omrtrace" CACHE STRING "Name of the trace library to link against")
+
+###
+### Glue library names
+###
+
+set(OMR_GC_GLUE_TARGET "NOTFOUND" CACHE STRING "The gc glue target, must be interface library")
+set(OMR_UTIL_GLUE_TARGET "NOTFOUND" CACHE STRING "The util glue target, must be interface library")
+set(OMR_RAS_GLUE_TARGET "NOTFOUND" CACHE STRING "The ras glue target, must be interface library")
+set(OMR_CORE_GLUE_TARGET "NOTFOUND" CACHE STRING "The core glue target, must be and interface library")
 
 ###
 ### Boolean Feature Flags
@@ -93,8 +124,6 @@ set(OMR_INTERP_HAS_SEMAPHORES ON CACHE BOOL "TODO: Document")
 set(OMR_INTERP_COMPRESSED_OBJECT_HEADER OFF CACHE BOOL "TODO: Document")
 set(OMR_INTERP_SMALL_MONITOR_SLOT OFF CACHE BOOL "TODO: Document")
 
-set(OMR_RAS_TDF_TRACE ON CACHE BOOL "TODO: Document")
-
 set(OMR_THR_ADAPTIVE_SPIN ON CACHE BOOL "TODO: Document")
 set(OMR_THR_JLM ON CACHE BOOL "TODO: Document")
 set(OMR_THR_JLM_HOLD_TIMES ON CACHE BOOL "TODO: Document")
@@ -132,6 +161,7 @@ set(OMR_PORT_CAN_RESERVE_SPECIFIC_ADDRESS ON CACHE BOOL "TODO: Document")
 set(OMR_PORT_NUMA_SUPPORT OFF CACHE BOOL "TODO: Document")
 set(OMR_PORT_ALLOCATE_TOP_DOWN OFF CACHE BOOL "TODO: Document")
 set(OMR_PORT_ZOS_CEEHDLRSUPPORT OFF CACHE BOOL "TODO: Document")
+set(OMRPORT_OMRSIG_SUPPORT OFF CACHE BOOL "TODO: Document")
 set(OMR_PORT_ASYNC_HANDLER OFF CACHE BOOL "TODO: Document")
 
 
@@ -142,4 +172,4 @@ set(OMR_ENV_GCC OFF CACHE BOOL "TODO: Document")
 
 set(OMR_OPT_CUDA OFF CACHE BOOL "TODO: Document")
 
-set(OMR_SANITIZE OFF CACHE STRING "Sanitizer selection. Only has an effect on GNU or Clang") 
+set(OMR_SANITIZE OFF CACHE STRING "Sanitizer selection. Only has an effect on GNU or Clang")

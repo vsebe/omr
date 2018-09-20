@@ -20,6 +20,7 @@
  *******************************************************************************/
 
 #include <stdio.h>
+#include <string>
 #include "codegen/CodeGenerator.hpp"
 #include "compile/CompilationTypes.hpp"
 #include "control/CompileMethod.hpp"
@@ -100,8 +101,9 @@ initializeCodeCache(TR::CodeCacheManager & codeCacheManager)
    codeCacheConfig._largeCodePageFlags = 0;
    codeCacheConfig._maxNumberOfCodeCaches = 96;
    codeCacheConfig._canChangeNumCodeCaches = true;
-   codeCacheConfig._emitElfObject = TR::Options::getCmdLineOptions()->getOption(TR_PerfTool);
-   codeCacheConfig._emitELFObjectFile = TR::Options::getCmdLineOptions()->getOption(TR_EnableObjectFileGeneration);
+   codeCacheConfig._emitExecutableELF = TR::Options::getCmdLineOptions()->getOption(TR_PerfTool)
+                                    ||  TR::Options::getCmdLineOptions()->getOption(TR_EmitExecutableELFFile);
+   codeCacheConfig._emitRelocatableELF = TR::Options::getCmdLineOptions()->getOption(TR_EmitRelocatableELFFile);
 
    TR::CodeCache *firstCodeCache = codeCacheManager.initialize(true, 1);
    }

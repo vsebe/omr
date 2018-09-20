@@ -63,10 +63,6 @@ public:
 	 * Function members
 	 */
 private:
-#if defined(OMR_GC_CONCURRENT_SCAVENGER)
-	bool isConcurrentMarkInProgress();
-#endif /* OMR_GC_CONCURRENT_SCAVENGER */
-
 	MMINLINE void
 	assertSaneObjectPtr(MM_EnvironmentBase *env, omrobjectptr_t objectPtr)
 	{
@@ -74,20 +70,10 @@ private:
 		Assert_MM_objectAligned(env, objectPtr);
 		Assert_GC_true_with_message3(env, isHeapObject(objectPtr), "Object %p not in heap range [%p,%p)\n", objectPtr, _heapBase, _heapTop);
 		
-#if defined(OMR_GC_CONCURRENT_SCAVENGER)
-		/* This is an expensive assert - fetching class slot during marking operation, thus invalidating benefits of leaf optimization.  
-		 * TODO: after some soaking remove it!
-		 */
-		if (_extensions->isConcurrentScavengerEnabled()) {
-			MM_ForwardedHeader forwardHeader(objectPtr);
-			omrobjectptr_t forwardPtr = forwardHeader.getNonStrictForwardedObject();
-			/* It is ok to encounter a forwarded object during overlapped concurrent scavenger/marking (or even root scanning),
-			 * but we must do nothing about it (if in backout, STW global phase will recover them).
-			 */
-			Assert_MM_true(NULL == forwardPtr || (isConcurrentMarkInProgress() && _extensions->isConcurrentScavengerInProgress()));
-		}
-#endif /* OMR_GC_CONCURRENT_SCAVENGER */ 				
+		assertNotForwardedPointer(env, objectPtr);
 	}
+	
+	void assertNotForwardedPointer(MM_EnvironmentBase *env, omrobjectptr_t objectPtr);
 
 	/**
 	 * Private internal. Called exclusively from completeScan();
@@ -292,7 +278,7 @@ public:
 	{
 		return ((_heapBase <= (uint8_t *)objectPtr) && (_heapTop > (uint8_t *)objectPtr));
 	}
-	
+
 	/**
 	 * Update the slot value to point to (Scavenger) forwarded object. If self-forwarded,
 	 * the slot is unchanged, but the class slot of the self-forwarded object is restored (self-forwarded bits are reset).
@@ -303,23 +289,16 @@ public:
 	 * during Scavenger aborted cycle to prevent duplicate copies). The fixup will be done after Scavenger Cycle is done, 
 	 * in the final phase of Concurrent GC when we scan Nursery. 
 	 */
-	
+
 	void fixupForwardedSlot(GC_SlotObject *slotObject) {
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 		if (_extensions->isConcurrentScavengerEnabled() && _extensions->isScavengerBackOutFlagRaised()) {
-			MM_ForwardedHeader forwardHeader(slotObject->readReferenceFromSlot());
-			omrobjectptr_t forwardPtr = forwardHeader.getNonStrictForwardedObject();
-	
-			if ((NULL != forwardPtr) && !isConcurrentMarkInProgress()) {
-				if (forwardHeader.isSelfForwardedPointer()) {
-					forwardHeader.restoreSelfForwardedPointer();
-				} else {
-					slotObject->writeReferenceToSlot(forwardPtr);
-				}
-			}
+			fixupForwardedSlotOutline(slotObject);
 		}
-#endif /* OMR_GC_CONCURRENT_SCAVENGER */ 			
+#endif /* OMR_GC_CONCURRENT_SCAVENGER */
 	}
+	
+	void fixupForwardedSlotOutline(GC_SlotObject *slotObject);
 
 	/**
 	 * Create a MarkingScheme object.

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -44,7 +44,6 @@ namespace TR { class X86ForceRecompilationSnippet; }
 namespace TR { class X86GuardedDevirtualSnippet; }
 namespace TR { class X86PicDataSnippet; }
 namespace TR { class X86RecompilationSnippet; }
-namespace TR { class X86ScratchArgHelperCallSnippet; }
 namespace TR { class X86SpineCheckSnippet; }
 namespace TR { class X86UnresolvedVirtualCallSnippet; }
 namespace TR { class LabelSymbol; }
@@ -99,9 +98,6 @@ TR_Debug::getNamex(TR::Snippet *snippet)
          break;
       case TR::Snippet::IsJNIPause:
          return "JNI Pause Snippet";
-         break;
-      case TR::Snippet::IsScratchArgHelperCall:
-         return "Helper Call Snippet with scratch-reg argument";
          break;
       case TR::Snippet::IsForceRecompilation:
          return "Force Recompilation Snippet";
@@ -207,9 +203,6 @@ TR_Debug::printx(TR::FILE *pOutFile, TR::Snippet *snippet)
       case TR::Snippet::IsSpineCheck:
          print(pOutFile, (TR::X86SpineCheckSnippet *)snippet);
          break;
-      case TR::Snippet::IsScratchArgHelperCall:
-         print(pOutFile, (TR::X86ScratchArgHelperCallSnippet *)snippet);
-         break;
       case TR::Snippet::IsForceRecompilation:
          print(pOutFile, (TR::X86ForceRecompilationSnippet  *)snippet);
          break;
@@ -217,12 +210,6 @@ TR_Debug::printx(TR::FILE *pOutFile, TR::Snippet *snippet)
          print(pOutFile, (TR::X86RecompilationSnippet *)snippet);
          break;
 #endif
-      case TR::Snippet::IsConstantData:
-         print(pOutFile, (TR::IA32ConstantDataSnippet *)snippet);
-         break;
-      case TR::Snippet::IsData:
-         print(pOutFile, (TR::IA32DataSnippet *)snippet);
-         break;
       case TR::Snippet::IsDivideCheck:
          print(pOutFile, (TR::X86DivideCheckSnippet  *)snippet);
          break;
@@ -250,8 +237,11 @@ TR_Debug::printx(TR::FILE *pOutFile, TR::Snippet *snippet)
          break;
 #endif
       case TR::Snippet::IsRestart:
-      default:
          TR_ASSERT(0, "unexpected snippet kind: %d", snippet->getKind());
+         break;
+      default:
+         snippet->print(pOutFile, this);
+         break;
       }
    }
 

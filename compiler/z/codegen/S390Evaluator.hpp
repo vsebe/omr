@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -186,12 +186,6 @@ int32_t getVectorElementSize(TR::Node *node);
 int32_t getVectorElementSizeMask(TR::Node *node);
 int32_t getVectorElementSizeMask(int8_t size);
 
-TR::Register * generateS390ComplexCompareBool(TR::Node * node, TR::CodeGenerator * cg, TR::InstOpCode::Mnemonic branchOp,
-                                                TR::InstOpCode::S390BranchCondition branchOpCond);
-void asmNodeBookKeeping(TR::CodeGenerator * cg, TR::Node * node, TR::Node * child, int8_t i, TR::RegisterDependencyConditions * conditions);
-
-
-
 #ifndef _MSC_VER
 // Because these templates are not defined in headers, but the cpp TreeEvaluator.cpp, suppress implicit instantiation
 // using these extern definitions. Unfortunately, Visual Studio likes doing things differently, so for VS, this chunk
@@ -232,23 +226,15 @@ TR::Register *getConditionCode(TR::Node *node, TR::CodeGenerator *cg, TR::Regist
 TR::RegisterDependencyConditions *getGLRegDepsDependenciesFromIfNode(TR::CodeGenerator *cg, TR::Node* ificmpNode);
 void generateLongDoubleStore(TR::Node *node, TR::CodeGenerator *cg, TR::Register *reg, TR::Register *addressReg);
 
-#define VOID_BODY
-#define NULL_BODY
-#define BOOL_BODY
-
 class TR_S390ComputeCC : public TR::TreeEvaluator
    {
    public:
-   static bool setCarryBorrow(TR::Node *flagNode, bool invertValue, TR::CodeGenerator *cg) BOOL_BODY;
-   static void computeCC(TR::Node *node, TR::Register *ccReg, TR::CodeGenerator *cg) VOID_BODY;
-   static void computeCCLogical(TR::Node *node, TR::Register *ccReg, TR::Register *targetReg, TR::CodeGenerator *cg, bool is64Bit=false) VOID_BODY;
+   static bool setCarryBorrow(TR::Node *flagNode, bool invertValue, TR::CodeGenerator *cg);
+   static void computeCC(TR::Node *node, TR::Register *ccReg, TR::CodeGenerator *cg);
+   static void computeCCLogical(TR::Node *node, TR::Register *ccReg, TR::Register *targetReg, TR::CodeGenerator *cg, bool is64Bit=false);
    private:
-   static void saveHostCC(TR::Node *node, TR::Register *ccReg, TR::CodeGenerator *cg) VOID_BODY;
+   static void saveHostCC(TR::Node *node, TR::Register *ccReg, TR::CodeGenerator *cg);
    };
-
-#undef NULL_BODY
-#undef VOID_BODY
-
 
 TR::InstOpCode::S390BranchCondition getStandardIfBranchConditionForArraycmp(TR::Node * ifxcmpXXNode, TR::CodeGenerator *cg);
 

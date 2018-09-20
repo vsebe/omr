@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017, 2017 IBM Corp. and others
+ * Copyright (c) 2017, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -28,7 +28,6 @@
 #include <iostream>
 #include <stdlib.h>
 #include <stdint.h>
-#include <dlfcn.h>
 #include <errno.h>
 
 #include "Jit.hpp"
@@ -80,7 +79,9 @@ ConditionalMethod::buildIL()
                          x_lt_U_builder->   Load("U"));
 
    TR::IlBuilder *rc1True = NULL, *rc1False = NULL;
-   IfAnd(&rc1True, &rc1False, 2, x_ge_L_builder, x_ge_L, x_lt_U_builder, x_lt_U);
+   IfAnd(&rc1True, &rc1False, 2,
+      MakeCondition(x_ge_L_builder, x_ge_L),
+      MakeCondition(x_lt_U_builder, x_lt_U));
    rc1True->Store("rc1",
    rc1True->   ConstInt32(1));
    rc1False->Store("rc1",
@@ -101,7 +102,9 @@ ConditionalMethod::buildIL()
                          x_ge_U_builder->   Load("U"));
 
    TR::IlBuilder *rc2True = NULL, *rc2False = NULL;
-   IfOr(&rc2False, &rc2True, 2, x_lt_L_builder, x_lt_L, x_ge_U_builder, x_ge_U);
+   IfOr(&rc2False, &rc2True, 2,
+      MakeCondition(x_lt_L_builder, x_lt_L),
+      MakeCondition(x_ge_U_builder, x_ge_U));
    rc2True->Store("rc2",
    rc2True->   ConstInt32(1));
    rc2False->Store("rc2",
@@ -159,9 +162,10 @@ ConditionalMethod::buildIL()
                             equiv1->   Load("rc4"));
 
    TR::IlBuilder *returnTrue = NULL, *returnFalse = NULL;
-   IfAnd(&returnTrue, &returnFalse, 3, equiv1, rc12Equal,
-                                       equiv2, rc23Equal,
-                                       equiv3, rc34Equal);
+   IfAnd(&returnTrue, &returnFalse, 3,
+      MakeCondition(equiv1, rc12Equal),
+      MakeCondition(equiv2, rc23Equal),
+      MakeCondition(equiv3, rc34Equal));
 
    returnTrue->Return(
    returnTrue->   ConstInt32(1));

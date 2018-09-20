@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -25,6 +25,7 @@
 #include "env/CompilerEnv.hpp"
 #include "env/jittypes.h"             // for uintptrj_t, intptrj_t
 #include "infra/Assert.hpp"           // for TR_ASSERT
+#include "compile/Compilation.hpp"    // for Compilation
 
 #define notImplemented(A) TR_ASSERT(0, "OMR::ClassEnv::%s is undefined", (A) )
 
@@ -41,4 +42,16 @@ OMR::ClassEnv::getArrayElementWidthInBytes(TR::Compilation *comp, TR_OpaqueClass
    {
    notImplemented("getArrayElementWidthInBytes");
    return 0;
+   }
+
+intptrj_t
+OMR::ClassEnv::getVFTEntry(TR::Compilation *comp, TR_OpaqueClassBlock* clazz, int32_t offset)
+   {
+   return *(intptrj_t*) (((uint8_t *)clazz) + offset);
+   }
+
+bool
+OMR::ClassEnv::classUnloadAssumptionNeedsRelocation(TR::Compilation *comp)
+   {
+   return comp->compileRelocatableCode();
    }

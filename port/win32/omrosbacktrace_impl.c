@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2015 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -176,7 +176,7 @@ load_dbg_functions(struct OMRPortLibrary *portLibrary)
 }
 
 /* This function sets symbol options and initializes the debug PDB path and symbol handler, if not already
- * initialised. We reset the symbol options and free loaded symbols on completion of the native stack walk
+ * initialized. We reset the symbol options and free loaded symbols on completion of the native stack walk
  * for javacores. PPG_pdbData.numberOfModules indicates whether we have currently initialized symbols.
  *
  * Note - this is called single threaded, e.g. under PPG_osBacktrace_Mutex
@@ -307,7 +307,7 @@ omrintrospect_backtrace_thread_raw(struct OMRPortLibrary *portLibrary, J9Platfor
 		stackFrame.AddrStack.Mode = AddrModeFlat;
 		stackFrame.AddrFrame.Mode = AddrModeFlat;
 
-#ifdef WIN64
+#if defined(OMR_ENV_DATA64)
 		stackFrame.AddrPC.Offset = threadContext.Rip;
 		stackFrame.AddrStack.Offset = threadContext.Rsp;
 		stackFrame.AddrFrame.Offset = threadContext.Rbp;
@@ -315,7 +315,7 @@ omrintrospect_backtrace_thread_raw(struct OMRPortLibrary *portLibrary, J9Platfor
 		stackFrame.AddrPC.Offset = threadContext.Eip;
 		stackFrame.AddrStack.Offset = threadContext.Esp;
 		stackFrame.AddrFrame.Offset = threadContext.Ebp;
-#endif
+#endif /* defined(OMR_ENV_DATA64) */
 
 		rc = TRUE;
 		nextFrame = &threadInfo->callstack;
@@ -323,11 +323,11 @@ omrintrospect_backtrace_thread_raw(struct OMRPortLibrary *portLibrary, J9Platfor
 		/* now walk the stack and maintain a count of the frames */
 		for (frameNumber = 0; rc != FALSE; frameNumber++) {
 			rc = PPG_dbgHlpLibraryFunctions->StackWalk64(
-#ifdef WIN64
+#if defined(OMR_ENV_DATA64)
 					 IMAGE_FILE_MACHINE_AMD64,
 #else
 					 IMAGE_FILE_MACHINE_I386,
-#endif
+#endif /* defined(OMR_ENV_DATA64) */
 					 process,
 					 thread,
 					 &stackFrame,

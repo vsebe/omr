@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2016 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -30,9 +30,9 @@
 
 #include "VerboseHandlerOutputStandard.hpp"
 
-#if defined(WIN32)
+#if defined(OMR_OS_WINDOWS)
 #define snprintf _snprintf
-#endif /* defined(WIN32) */
+#endif /* defined(OMR_OS_WINDOWS) */
 
 MM_VerboseManagerImpl *
 MM_VerboseManagerImpl::newInstance(MM_EnvironmentBase *env, OMR_VM* vm)
@@ -62,22 +62,21 @@ bool
 MM_VerboseManagerImpl::configureVerboseGC(OMR_VM *omrVM, char *filename, uintptr_t fileCount, uintptr_t iterations)
 {
 	OMRPORT_ACCESS_FROM_OMRVM(omrVM);
-	if (MM_VerboseManager::configureVerboseGC(omrVM, filename, fileCount, iterations)) {
-		this->fileCount = fileCount;
-		this->iterations = iterations;
-		size_t len = strlen(filename);
-		this->filename = (char *)omrmem_allocate_memory(len+1, OMRMEM_CATEGORY_MM);
-		strncpy(this->filename, filename, len);
-		this->filename[len] = '\0';
-		return true;
-		if (NULL != this->filename) {
-			return false;
-			strncpy(this->filename, filename, len);
-			this->filename[len] = '\0';
-			return true;
-		}
+	if (!MM_VerboseManager::configureVerboseGC(omrVM, filename, fileCount, iterations)) {
+		return false;
 	}
-	return false;
+	this->fileCount = fileCount;
+	this->iterations = iterations;
+	size_t len = strlen(filename);
+
+	this->filename = (char *)omrmem_allocate_memory(len+1, OMRMEM_CATEGORY_MM);
+	if (NULL == this->filename) {
+		return false;
+	}
+
+	strcpy(this->filename, filename);
+
+	return true;
 }
 
 bool
@@ -109,10 +108,8 @@ MM_VerboseManagerImpl::reconfigureVerboseGC(OMR_VM *omrVM)
 			strncpy(newLog + nameLen + pidLen, extension, extLen);
 			newLog[nameLen + pidLen + extLen] = '\0'; /* strncpy does NOT NULL terminate */
 		} else {
-			size_t len = strlen(filename);
-			strncpy(newLog,filename,len);
-			newLog[len] = '\0'; /* strncpy does NOT NULL terminate */
-			strncat(newLog,pidStr,pidLen); /* strncat does NULL terminate */
+			strcpy(newLog, filename);
+			strcat(newLog, pidStr);
 		}
 		omrmem_free_memory(this->filename);
 		filename = newLog;

@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2017, 2017 IBM Corp. and others
+# Copyright (c) 2017, 2018 IBM Corp. and others
 #
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,6 +19,11 @@
 # SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
 ###############################################################################
 
+omr_assert(
+	TEST OMR_EXAMPLE
+	MESSAGE "The fv gctest component relies on the example glue"
+)
+
 add_executable(omrgctest
 	GCConfigObjectTable.cpp
 	GCConfigTest.cpp
@@ -33,10 +38,8 @@ target_link_libraries(omrgctest
 	pugixml
 	omrtestutil
 	omrcore
-	${OMR_HOOK_LIB}
-	${OMR_TRACE_LIB}
+	omrvmstartup
 	${OMR_GC_LIB}
-	${OMR_THREAD_LIB}
 	${OMR_PORT_LIB}
 )
 

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -23,6 +23,7 @@
 #include "omrcfg.h"
 #include "omr.h"
 #include "ModronAssertions.h"
+#include "GlobalCollector.hpp"
 
 #include <string.h>
 
@@ -30,12 +31,17 @@
 #include "ConcurrentGC.hpp"
 #include "ConcurrentGCStats.hpp"
 #endif /* defined(OMR_GC_MODRON_CONCURRENT_MARK) */
+#include "Configuration.hpp"
 #include "EnvironmentBase.hpp"
 #include "GCExtensionsBase.hpp"
 #include "Heap.hpp"
 #include "MarkMap.hpp"
 #include "MarkingScheme.hpp"
 #include "Task.hpp"
+#if defined(OMR_GC_REALTIME)
+#include "WorkPacketsSATB.hpp"
+#endif /* defined(OMR_GC_REALTIME) */
+#include "RememberedSetSATB.hpp"
 #if defined(OMR_GC_MODRON_CONCURRENT_MARK)
 #include "WorkPacketsConcurrent.hpp"
 #else
@@ -383,13 +389,21 @@ MM_MarkingScheme::markLiveObjectsComplete(MM_EnvironmentBase *env)
 }
 
 MM_WorkPackets *
-MM_MarkingScheme::createWorkPackets(MM_EnvironmentBase *env) {
+MM_MarkingScheme::createWorkPackets(MM_EnvironmentBase *env)
+{
 	MM_WorkPackets *workPackets = NULL;
-
 	if (_extensions->isConcurrentMarkEnabled()) {
+		if (_extensions->configuration->isSnapshotAtTheBeginningBarrierEnabled()) {
+#if defined(OMR_GC_REALTIME)
+			MM_WorkPacketsSATB *workPacketsSATB = MM_WorkPacketsSATB::newInstance(env);
+			_extensions->sATBBarrierRememberedSet = MM_RememberedSetSATB::newInstance(env, workPacketsSATB);
+			workPackets = workPacketsSATB;
+#endif /* defined(OMR_GC_REALTIME) */
+		} else {
 #if defined OMR_GC_MODRON_CONCURRENT_MARK
-		workPackets = MM_WorkPacketsConcurrent::newInstance(env);
+			workPackets = MM_WorkPacketsConcurrent::newInstance(env);
 #endif /* defined OMR_GC_MODRON_CONCURRENT_MARK */
+		}
 	} else {
 		workPackets = MM_WorkPacketsStandard::newInstance(env);
 	}
@@ -397,17 +411,37 @@ MM_MarkingScheme::createWorkPackets(MM_EnvironmentBase *env) {
 	return workPackets;
 }
 
-
-#if defined(OMR_GC_CONCURRENT_SCAVENGER)
-bool
-MM_MarkingScheme::isConcurrentMarkInProgress() {
-#if defined(OMR_GC_MODRON_CONCURRENT_MARK)
-	uintptr_t mode = ((MM_ConcurrentGC *)_extensions->getGlobalCollector())->getConcurrentGCStats()->getExecutionMode();
-	return (CONCURRENT_ROOT_TRACING <= mode) && (mode < CONCURRENT_EXHAUSTED);
-#else
-	return false;
-#endif /* OMR_GC_MODRON_CONCURRENT_MARK */
+void
+MM_MarkingScheme::assertNotForwardedPointer(MM_EnvironmentBase *env, omrobjectptr_t objectPtr)
+{
+	/* This is an expensive assert - fetching class slot during marking operation, thus invalidating benefits of leaf optimization.
+	 * TODO: after some soaking remove it!
+	 */
+	if (_extensions->isConcurrentScavengerEnabled()) {
+		MM_ForwardedHeader forwardHeader(objectPtr);
+		omrobjectptr_t forwardPtr = forwardHeader.getNonStrictForwardedObject();
+		/* It is ok to encounter a forwarded object during overlapped concurrent scavenger/marking (or even root scanning),
+		 * but we must do nothing about it (if in backout, STW global phase will recover them).
+		 */
+		Assert_GC_true_with_message3(env, ((NULL == forwardPtr) || (!_extensions->getGlobalCollector()->isStwCollectionInProgress() && _extensions->isConcurrentScavengerInProgress())),
+			"Encountered object %p forwarded to %p (header %p) while Concurrent Scavenger/Marking not in progress\n", objectPtr, forwardPtr, &forwardHeader);
+	}
 }
+
+void
+MM_MarkingScheme::fixupForwardedSlotOutline(GC_SlotObject *slotObject) {
+#if defined(OMR_GC_CONCURRENT_SCAVENGER)
+	if (_extensions->getGlobalCollector()->isStwCollectionInProgress()) {
+		MM_ForwardedHeader forwardHeader(slotObject->readReferenceFromSlot());
+		omrobjectptr_t forwardPtr = forwardHeader.getNonStrictForwardedObject();
+
+		if (NULL != forwardPtr) {
+			if (forwardHeader.isSelfForwardedPointer()) {
+				forwardHeader.restoreSelfForwardedPointer();
+			} else {
+				slotObject->writeReferenceToSlot(forwardPtr);
+			}
+		}
+	}
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */
-
-
+}

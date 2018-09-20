@@ -55,7 +55,7 @@ collectorCreationHelper(OMR_VM *omrVM, MM_EnvironmentBase *env)
 {
 	OMRPORT_ACCESS_FROM_OMRVM(omrVM);
 	MM_GCExtensionsBase *extensions = MM_GCExtensionsBase::getExtensions(omrVM);
-	MM_Collector *globalCollector = extensions->configuration->createGlobalCollector(env);
+	MM_GlobalCollector *globalCollector = extensions->configuration->createGlobalCollector(env);
 	omr_error_t rc = OMR_ERROR_NONE;
 
 	if (NULL == globalCollector) {
@@ -320,14 +320,6 @@ OMR_GC_ShutdownHeap(OMR_VM *omrVM)
 			extensions->verboseGCManager->disableVerboseGC();
 			extensions->verboseGCManager->kill(&env);
 			extensions->verboseGCManager = NULL;
-		}
-
-		if ((NULL != extensions) && (NULL != extensions->heap)) {
-			MM_MemorySpace *defaultSpace = extensions->heap->getDefaultMemorySpace();
-			if (NULL != defaultSpace) {
-				defaultSpace->kill(&env);
-				extensions->heap->setDefaultMemorySpace(NULL);
-			}
 		}
 
 		if (NULL != extensions->configuration) {

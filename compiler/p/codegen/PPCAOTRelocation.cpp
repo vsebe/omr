@@ -39,7 +39,16 @@ void TR::PPCPairedRelocation::mapRelocation(TR::CodeGenerator *cg)
    {
    if (cg->comp()->getOption(TR_AOT))
       {
-      cg->addAOTRelocation(
+      // The validation and inlined method ExternalRelocations are added after
+      // binary encoding is finished so that their actual relocation records
+      // will end up at the start. This way other relocations can depend on the
+      // appropriate validations already having completed.
+      //
+      // This relocation may also need to depend on previous validations, but
+      // those are already in the AOT relocation list by this point. Add it at
+      // the beginning to maintain the correct relative ordering.
+
+      cg->addExternalRelocation(
          new (cg->trHeapMemory()) TR::ExternalOrderedPair32BitRelocation(
             getSourceInstruction()->getBinaryEncoding(),
             getSource2Instruction()->getBinaryEncoding(),
@@ -47,7 +56,8 @@ void TR::PPCPairedRelocation::mapRelocation(TR::CodeGenerator *cg)
             getKind(), cg),
          __FILE__,
          __LINE__,
-         getNode());
+         getNode(),
+         TR::ExternalRelocationAtFront);
       }
    }
 

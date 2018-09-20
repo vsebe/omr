@@ -34,6 +34,7 @@ add_executable(comptest
 	ILValidatorTest.cpp
 	ArithmeticTest.cpp
 	ShiftAndRotateTest.cpp
+	SimplifierFoldAbsNegTest.cpp
 	SimplifierFoldAndTest.cpp
 	IfxcmpgeReductionTest.cpp
 	VectorTest.cpp
@@ -49,8 +50,6 @@ target_link_libraries(comptest
 	omrGtestGlue
 	tril
 )
-
-target_compile_options(comptest PRIVATE "-Wno-write-strings")
 
 set_property(TARGET comptest PROPERTY FOLDER fvtest)
 

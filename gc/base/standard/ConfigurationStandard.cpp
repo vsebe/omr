@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -30,7 +30,8 @@
 #include "ConfigurationStandard.hpp"
 
 #if defined(OMR_GC_MODRON_CONCURRENT_MARK)
-#include "ConcurrentGC.hpp"
+#include "ConcurrentGCIncrementalUpdate.hpp"
+#include "ConcurrentGCSATB.hpp"
 #endif /* OMR_GC_MODRON_CONCURRENT_MARK */
 #if defined(OMR_GC_CONCURRENT_SWEEP)
 #include "ConcurrentSweepGC.hpp"
@@ -87,6 +88,26 @@ MM_ConfigurationStandard::initialize(MM_EnvironmentBase* env)
 	return result;
 }
 
+
+void
+MM_ConfigurationStandard::initializeGCThreadCount(MM_EnvironmentBase* env)
+{
+
+	MM_Configuration::initializeGCThreadCount(env);
+
+#if defined(OMR_GC_CONCURRENT_SCAVENGER)
+	MM_GCExtensionsBase* extensions = env->getExtensions();
+
+	/* If not explicitly set, concurrent phase of CS runs with approx 1/4 the thread count (relative to STW phases thread count */
+	if (!extensions->concurrentScavengerBackgroundThreadsForced) {
+		extensions->concurrentScavengerBackgroundThreads = OMR_MAX(1, (extensions->gcThreadCount + 1) / 4);
+	} else if (extensions->concurrentScavengerBackgroundThreads > extensions->gcThreadCount) {
+		extensions->concurrentScavengerBackgroundThreads = extensions->gcThreadCount;
+	}
+#endif
+}
+
+
 /**
  * Create the global collector for a Standard configuration
  */
@@ -99,7 +120,11 @@ MM_ConfigurationStandard::createGlobalCollector(MM_EnvironmentBase* env)
 
 #if defined(OMR_GC_MODRON_CONCURRENT_MARK)
 	if (extensions->concurrentMark) {
-		return MM_ConcurrentGC::newInstance(env);
+		if (isSnapshotAtTheBeginningBarrierEnabled()) {
+			return MM_ConcurrentGCSATB::newInstance(env);
+		} else {
+			return MM_ConcurrentGCIncrementalUpdate::newInstance(env);
+		}
 	}
 #endif /* OMR_GC_MODRON_CONCURRENT_MARK */
 #if defined(OMR_GC_CONCURRENT_SWEEP)

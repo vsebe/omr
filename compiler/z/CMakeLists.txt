@@ -36,6 +36,7 @@ compiler_library(z
 	${CMAKE_CURRENT_LIST_DIR}/codegen/S390GenerateInstructions.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/S390HelperCallSnippet.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/S390Instruction.cpp
+	${CMAKE_CURRENT_LIST_DIR}/codegen/S390Peephole.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/OMRLinkage.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/SystemLinkage.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/S390OutOfLineCodeSection.cpp
@@ -47,7 +48,6 @@ compiler_library(z
 	${CMAKE_CURRENT_LIST_DIR}/codegen/UnaryEvaluator.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/OMRInstruction.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/InstOpCode.cpp
-	${CMAKE_CURRENT_LIST_DIR}/codegen/InstOpCodeTables.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/OMRRegister.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/OMRRealRegister.cpp
 	${CMAKE_CURRENT_LIST_DIR}/codegen/OMRRegisterIterator.cpp

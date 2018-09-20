@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2016 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -19,8 +19,8 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#ifndef OMR_Z_INSTRUCTIONBASE_INCL
-#define OMR_Z_INSTRUCTIONBASE_INCL
+#ifndef OMR_Z_INSTRUCTION_INCL
+#define OMR_Z_INSTRUCTION_INCL
 
 /*
  * The following #define and typedef must appear before any #includes in this file
@@ -30,7 +30,7 @@
 namespace OMR { namespace Z { class Instruction; } }
 namespace OMR { typedef OMR::Z::Instruction InstructionConnector; }
 #else
-#error OMR::Z::Instruction expected to be a primary connector, but a OMR connector is already defined
+#error OMR::Z::Instruction expected to be a primary connector, but an OMR connector is already defined
 #endif
 
 #include "compiler/codegen/OMRInstruction.hpp"
@@ -199,13 +199,10 @@ class OMR_EXTENSIBLE Instruction : public OMR::Instruction
    virtual bool isLabel()             { return _opcode.isLabel() > 0; }
    virtual bool isFloat()             { return _opcode.singleFPOp() > 0 || _opcode.doubleFPOp() > 0; }
    virtual bool isAdmin()             { return _opcode.isAdmin() > 0; }
-   virtual bool isBeginBlock()        { return _opcode.isBeginBlock() > 0; }
    virtual bool isDebugFence()        { return false; }
 
    virtual bool is4ByteLoad();
-   virtual bool isAsmGen();
    virtual bool isRet();
-   virtual bool isTailCall();
 
    virtual bool implicitlyUsesGPR0() { return _opcode.implicitlyUsesGPR0() > 0; }
    virtual bool implicitlyUsesGPR1() { return _opcode.implicitlyUsesGPR1() > 0; }
@@ -264,7 +261,6 @@ class OMR_EXTENSIBLE Instruction : public OMR::Instruction
    void setCCInfo();
    void readCCInfo();
    void clearCCInfo();
-   void addARDependencyCondition(TR::Register * virtAR, TR::Register * assignedGPR);
 
    const char *getName(TR_Debug * debug);
    bool isBreakPoint() {return (_index & BreakPoint) != 0;}
@@ -291,7 +287,7 @@ class OMR_EXTENSIBLE Instruction : public OMR::Instruction
       CCuseKnown                          = 0x0100, ///< Usage of CC set by current instruction is known.
       CCused                              = 0x0200, ///< CC set by current instruction is used by subsequent instructions.
       OutOfLineEX                         = 0x0400, ///< TR::InstOpCode::EX instruction references a ConstantInstructionSnippet object
-                                                    ///< or an SS_FORMAT instruction is the target of an TR::InstOpCode::EX instruction
+                                                    ///< or an SSx instruction is the target of an TR::InstOpCode::EX instruction
       ThrowsImplicitException             = 0x0800,
       ThrowsImplicitNullPointerException  = 0x1000,
       StartInternalControlFlow            = 0x2000,
@@ -471,4 +467,4 @@ class OMR_EXTENSIBLE Instruction : public OMR::Instruction
 
 }
 
-#endif /* OMR_Z_INSTRUCTIONBASE_INCL */
+#endif

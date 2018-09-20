@@ -141,6 +141,8 @@ else
         else
             ifeq (arm,$(OMR_HOST_ARCH))
                 GLOBAL_ASFLAGS+=$(ARM_ARCH_FLAGS)
+            else ifeq (aarch64,$(OMR_HOST_ARCH))
+                GLOBAL_ASFLAGS+=-march=armv8-a+simd
             else
                 # Nothing
             endif
@@ -155,14 +157,14 @@ endif
 ## Debugging Information
 # Indicate that GNU debug symbols are being used
 ifeq (gcc,$(OMR_TOOLCHAIN))
-  ifneq (,$(filter arm ppc s390 x86,$(OMR_HOST_ARCH)))
+  ifneq (,$(filter aarch64 arm ppc s390 x86,$(OMR_HOST_ARCH)))
     USE_GNU_DEBUG:=1
   endif
 endif
 
 ifeq (1,$(OMR_DEBUG))
   ifeq (1,$(USE_GNU_DEBUG))
-    GLOBAL_ASFLAGS+=-gddb
+    GLOBAL_ASFLAGS+=-ggdb
     GLOBAL_CXXFLAGS+=-ggdb
     GLOBAL_CFLAGS+=-ggdb
     GLOBAL_LDFLAGS+=-ggdb
@@ -185,6 +187,11 @@ ifeq (x86,$(OMR_HOST_ARCH))
         GLOBAL_CXXFLAGS+=-m32 -msse2 -I/usr/include/nptl
         GLOBAL_CPPFLAGS+=-DJ9X86
     endif
+
+else ifeq (aarch64,$(OMR_HOST_ARCH))
+    GLOBAL_CFLAGS+=-march=armv8-a+simd -Wno-unused-but-set-variable
+    GLOBAL_CXXFLAGS+=-march=armv8-a+simd -Wno-unused-but-set-variable
+    GLOBAL_CPPFLAGS+=-DJ9AARCH64 -DAARCH64GNU -DAARCH64 -DFIXUP_UNALIGNED -Wno-unused-but-set-variable
 
 else
     ifeq (arm,$(OMR_HOST_ARCH))
@@ -357,6 +364,9 @@ ifeq ($(OMR_OPTIMIZE),1)
         endif
     else
         ifeq (arm,$(OMR_HOST_ARCH))
+            OPTIMIZATION_FLAGS+=-O3 -fno-strict-aliasing
+        else ifeq (aarch64,$(OMR_HOST_ARCH))
+            #TODO:AARCH64 Do not optimize just yet. we need debugging support until we are assured this run
             OPTIMIZATION_FLAGS+=-O3 -fno-strict-aliasing
         else
             ifeq (ppc,$(OMR_HOST_ARCH))

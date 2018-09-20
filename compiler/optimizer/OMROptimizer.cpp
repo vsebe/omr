@@ -489,9 +489,6 @@ const OptimizationStrategy lateLocalOpts[] =
    { OMR::globalDeadStoreGroup,                    },
    { OMR::eachLocalAnalysisPassGroup               },
    { OMR::treeSimplification                       },
-#ifdef TR_HOST_S390
-   { OMR::longRegAllocation                        },
-#endif
    { OMR::endGroup                                 }
    };
 
@@ -799,8 +796,6 @@ OMR::Optimizer::Optimizer(TR::Compilation *comp, TR::ResolvedMethodSymbol *metho
       new (comp->allocator()) TR::OptimizationManager(self(), TR_LocalLiveRangeReduction::create, OMR::localLiveRangeReduction);
    _opts[OMR::localReordering] =
       new (comp->allocator()) TR::OptimizationManager(self(), TR_LocalReordering::create, OMR::localReordering);
-   _opts[OMR::longRegAllocation] =
-      new (comp->allocator()) TR::OptimizationManager(self(), TR_LongRegAllocation::create, OMR::longRegAllocation);
    _opts[OMR::loopCanonicalization] =
       new (comp->allocator()) TR::OptimizationManager(self(), TR_LoopCanonicalizer::create, OMR::loopCanonicalization);
    _opts[OMR::loopVersioner] =
@@ -1139,7 +1134,7 @@ void OMR::Optimizer::optimize()
          }
       }
 
-   if (TR::Options::getCmdLineOptions()->getOption(TR_EnableDeterministicOrientedCompilation) &&
+   if (comp()->getOption(TR_EnableDeterministicOrientedCompilation) &&
        comp()->isOutermostMethod() &&
        (comp()->getMethodHotness() > cold) &&
        (comp()->getMethodHotness() < scorching))
@@ -1353,13 +1348,13 @@ int32_t OMR::Optimizer::performOptimization(const OptimizationStrategy *optimiza
 #ifdef J9_PROJECT_SPECIFIC
       case IfNotClassLoadPhase:
          if (!comp()->getPersistentInfo()->isClassLoadingPhase() ||
-             TR::Options::getCmdLineOptions()->getOption(TR_DontDowngradeToCold))
+             comp()->getOption(TR_DontDowngradeToCold))
             doThisOptimization = true;
          break;
 
       case IfNotClassLoadPhaseAndNotProfiling:
          if ((!comp()->getPersistentInfo()->isClassLoadingPhase() ||
-              TR::Options::getCmdLineOptions()->getOption(TR_DontDowngradeToCold))
+              comp()->getOption(TR_DontDowngradeToCold))
                &&
              (!comp()->isProfilingCompilation() || debug("ignoreIfNotProfiling"))
             )

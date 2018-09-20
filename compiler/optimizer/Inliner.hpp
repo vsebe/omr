@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -562,7 +562,6 @@ class OMR_InlinerUtil : public TR::OptimizationUtil, public OMR_InlinerHelper
        */
       virtual bool needTargetedInlining(TR::ResolvedMethodSymbol *callee);
    protected:
-      virtual bool validateInterfaceImplementation(TR_ResolvedMethod *interfaceMethod);
       virtual void refineColdness (TR::Node* node, bool& isCold);
       virtual void computeMethodBranchProfileInfo (TR::Block * cfgBlock, TR_CallTarget* calltarget, TR::ResolvedMethodSymbol* callerSymbol);
       virtual int32_t getCallCount(TR::Node *callNode);
@@ -587,7 +586,7 @@ class OMR_InlinerPolicy : public TR::OptimizationPolicy, public OMR_InlinerHelpe
       virtual int32_t getInitialBytecodeSize(TR_ResolvedMethod *feMethod, TR::ResolvedMethodSymbol * methodSymbol, TR::Compilation *comp);
       virtual bool tryToInline(TR_CallTarget *, TR_CallStack *, bool);
       virtual bool inlineMethodEvenForColdBlocks(TR_ResolvedMethod *method);
-      bool aggressiveSmallAppOpts() { return TR::Options::getCmdLineOptions()->getOption(TR_AggressiveOpts); }
+      bool aggressiveSmallAppOpts() { return comp()->getOption(TR_AggressiveOpts); }
       virtual bool willBeInlinedInCodeGen(TR::RecognizedMethod method);
       virtual bool canInlineMethodWhileInstrumenting(TR_ResolvedMethod *method);
 
@@ -607,6 +606,17 @@ class OMR_InlinerPolicy : public TR::OptimizationPolicy, public OMR_InlinerHelpe
 
       virtual bool dontPrivatizeArgumentsForRecognizedMethod(TR::RecognizedMethod recognizedMethod);
       virtual bool replaceSoftwareCheckWithHardwareCheck(TR_ResolvedMethod *calleeMethod);
+
+      /**
+       * \brief Answers whether the provided ResolvedMethodSymbol is a native method that can be inlined
+       *
+       * \param[in] comp : the TR::Compilation object
+       * \param[in] methodSymbol : the ResolvedMethodSymbol to check
+       *
+       * \return true if the method is inlineable; false otherwise
+       */
+      virtual bool isInlineableNativeMethod(TR::Compilation *comp, TR::ResolvedMethodSymbol *methodSymbol) { return false; }
+
    protected:
       virtual bool tryToInlineTrivialMethod (TR_CallStack* callStack, TR_CallTarget* calltarget);
       virtual bool alwaysWorthInlining(TR_ResolvedMethod * calleeMethod, TR::Node *callNode);

@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2017, 2017 IBM Corp. and others
+# Copyright (c) 2017, 2018 IBM Corp. and others
 #
 # This program and the accompanying materials are made available under
 # the terms of the Eclipse Public License 2.0 which accompanies this
@@ -20,29 +20,32 @@
 # SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
 ###############################################################################
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
+omr_add_tracegen(omrti.tdf)
+omr_add_tracegen(omrvm.tdf)
 
-add_tracegen(omrti.tdf)
-add_tracegen(omrvm.tdf)
+add_subdirectory(startup)
+
+omr_assert(
+	TEST OMR_CORE_GLUE_TARGET
+	MESSAGE "OMR_CORE_GLUE_TARGET must be set. Try using the example with OMR_EXAMPLE=ON"
+)
+
+omr_assert(
+	TEST OMR_RAS_GLUE_TARGET
+	MESSAGE "OMR_RAS_GLUE_TARGET must be set. Try using the example with OMR_EXAMPLE=ON"
+)
 
 add_library(omrcore STATIC
 	OMR_Agent.cpp
 	OMR_MethodDictionary.cpp
-	OMR_MethodDictionary.hpp
 	OMR_Profiler.cpp
 	OMR_Runtime.cpp
 	OMR_TI.cpp
 	OMR_TIMemorySize.cpp
 	OMR_VM.cpp
 	OMR_VMThread.cpp
-	omrrasinit.c
-	omrti.tdf
-	omrtrcinit.c
-	startup/omrvmstartup.cpp
 	ut_omrti.c
-	ut_omrti.h
 	ut_omrvm.c
-	ut_omrvm.h
 )
 
 if(OMR_WARNINGS_AS_ERRORS)
@@ -56,6 +59,14 @@ endif()
 target_include_directories(omrcore
 	PUBLIC
 		.
+	PRIVATE
+		${CMAKE_CURRENT_BINARY_DIR}
+)
+
+target_link_libraries(omrcore
+	PRIVATE
+		${OMR_CORE_GLUE_TARGET}
+		${OMR_RAS_GLUE_TARGET}
 )
 
 if(OMR_GC)
@@ -64,14 +75,9 @@ if(OMR_GC)
 		omrgc_hookgen
 	)
 
-	target_link_libraries(omrcore
-		PRIVATE
-			${OMR_CORE_GLUE_TARGET}
-	)
-
 	target_include_directories(omrcore
 		PRIVATE
-			$<TARGET_PROPERTY:omrgc,INTERFACE_INCLUDE_DIRECTORIES>
+			$<TARGET_PROPERTY:${OMR_GC_LIB},INTERFACE_INCLUDE_DIRECTORIES>
 			$<TARGET_PROPERTY:${OMR_GC_GLUE_TARGET},INTERFACE_INCLUDE_DIRECTORIES>
 	)
 endif(OMR_GC)

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2017 IBM Corp. and others
+ * Copyright (c) 1991, 2018 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -31,7 +31,6 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-
 
 #include "omrport.h"
 #include "omrportpriv.h"
@@ -350,7 +349,7 @@ addressRange_Width(AddressRange* range)
  * @param ADDRESS 		start			[in] The start address allowed, see also @param end
  * @param ADDRESS 		end				[in] The end address allowed, see also @param start.
  * 											 The returned memory address should be within the range defined by the @param start and the @param end.
- * @param uintptr_t 		byteAmount		[in] The block size required.
+ * @param uintptr_t 	byteAmount		[in] The block size required.
  * @param BOOLEAN 		reverse			[in] Returns the first available memory block when this param equals FALSE, returns the last available memory block when this param equals TRUE
  *
  * returns the address available.
@@ -362,8 +361,16 @@ findAvailableMemoryBlockNoMalloc(struct OMRPortLibrary *portLibrary,
 	BOOLEAN dataCorrupt = FALSE;
 	BOOLEAN matchFound = FALSE;
 
+	/*
+	 * The caller provides start and end addresses that constrain a non-null
+	 * address that can be returned by this function. Internally, however,
+	 * this function operates on ranges which are inclusive of the space
+	 * requested by the caller: the allowed range must be initialized taking
+	 * this difference into account by adding the requested block size to the
+	 * end address.
+	 */
 	AddressRange allowedRange;
-	addressRange_Init(&allowedRange, start, end);
+	addressRange_Init(&allowedRange, start, end + byteAmount);
 
 	AddressRange lastAvailableRange;
 	addressRange_Init(&lastAvailableRange, NULL, NULL);
@@ -392,7 +399,6 @@ findAvailableMemoryBlockNoMalloc(struct OMRPortLibrary *portLibrary,
 			BOOLEAN gotEOF = FALSE;
 			bytesRead = omrfile_read(portLibrary, fd, readBuf, sizeof(readBuf));
 			if (-1 == bytesRead) {
-				dataCorrupt = TRUE;
 				break;
 			}
 
@@ -1170,7 +1176,7 @@ port_numa_interleave_memory(struct OMRPortLibrary *portLibrary, void *start,
 #if defined(OMR_PORT_NUMA_SUPPORT)
 	Trc_PRT_vmem_port_numa_interleave_memory_enter();
 
-	if (1 == PPG_numa_platform_supports_numa) {
+	if (1 == PPG_numa_platform_interleave_memory) {
 		/* There seem to be variations in different kernel levels regarding how they treat the maxnode argument.
 		 * Depending on the system we're running on, it may fail if we specify a mask that is greater than the number of nodes.
 		 *
@@ -1372,9 +1378,7 @@ getMemoryInRangeForDefaultPages(struct OMRPortLibrary *portLibrary,
 
 	/* check if we should use quick search for fast performance */
 	if (OMR_ARE_ANY_BITS_SET(vmemOptions, OMRPORT_VMEM_ALLOC_QUICK)) {
-
 		void *smartAddress = NULL;
-		void *allocatedAddress = NULL;
 
 		if (1 == direction) {
 			smartAddress = findAvailableMemoryBlockNoMalloc(portLibrary,
@@ -1384,30 +1388,39 @@ getMemoryInRangeForDefaultPages(struct OMRPortLibrary *portLibrary,
 					startAddress, currentAddress, byteAmount, TRUE);
 		}
 
-		allocatedAddress = default_pageSize_reserve_memory(portLibrary,
+		if (NULL == smartAddress) {
+			/* None of the available regions are suitable. There's no point in performing
+			 * the linear search below: it would (slowly) arrive at the same conclusion.
+			 */
+			return NULL;
+		}
+
+		/* smartAddress is not NULL: try to get memory there */
+		memoryPointer = default_pageSize_reserve_memory(portLibrary,
 				smartAddress, byteAmount, identifier, mode,
 				PPG_vmem_pageSize[0], category);
-
-		if (NULL != allocatedAddress) {
-			/* If the memoryPointer located outside of the range, free it and set the pointer to NULL */
-			if ((startAddress <= allocatedAddress)
-					&& (endAddress >= allocatedAddress)) {
-				memoryPointer = allocatedAddress;
-			} else if (0
-					!= omrvmem_free_memory(portLibrary, allocatedAddress,
-							byteAmount, identifier)) {
-				return NULL;
+		if (NULL != memoryPointer) {
+			if (OMR_ARE_NO_BITS_SET(vmemOptions, OMRPORT_VMEM_STRICT_ADDRESS)) {
+				/* OMRPORT_VMEM_STRICT_ADDRESS is not set: accept whatever we get */
+			} else if ((startAddress <= memoryPointer) && (memoryPointer <= endAddress)) {
+				/* the address is in the requested range */
+			} else {
+				/* the address is outside of the range, free it */
+				if (0 != omrvmem_free_memory(portLibrary, memoryPointer, byteAmount, identifier)) {
+					/* free failed: we fail too */
+					return NULL;
+				}
+				/* try a linear search below */
+				memoryPointer = NULL;
 			}
 		}
 		/*
 		 * memoryPointer != NULL means that available address was found.
-		 * Otherwise, in case NULL == memoryPointer
-		 * the below logic will continue trying.
+		 * Otherwise, the below logic will continue trying.
 		 */
 	}
 
 	if (NULL == memoryPointer) {
-
 		/* Let's check for a 32bit or under request first. */
 		if (0 != (vmemOptions & OMRPORT_VMEM_ZTPF_USE_31BIT_MALLOC)) {
 			memoryPointer = default_pageSize_reserve_memory_32bit(portLibrary,
@@ -1654,7 +1667,7 @@ omrvmem_numa_set_affinity(struct OMRPortLibrary *portLibrary,
 	Trc_PRT_vmem_port_numa_set_affinity_enter(numaNode, address, byteAmount);
 
 #if defined(OMR_PORT_NUMA_SUPPORT)
-	if (1 == PPG_numa_platform_supports_numa) {
+	if ((1 == PPG_numa_platform_supports_numa) && (OMR_ARE_NO_BITS_SET(identifier->mode, OMRPORT_VMEM_NO_AFFINITY))) {
 		unsigned long maxnode = sizeof(J9PortNodeMask) * 8;
 
 		if ( (numaNode > 0) && (numaNode <= PPG_numa_max_node_bits) && (numaNode <= maxnode)) {

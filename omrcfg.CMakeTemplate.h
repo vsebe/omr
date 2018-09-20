@@ -28,7 +28,10 @@
 #if !defined(OMRCFG_H_)
 #define OMRCFG_H_
 
-/* @ddr_namespace: map_to_type=OmrBuildFlags */
+/**
+ * @ddr_namespace: map_to_type=OmrBuildFlags
+ * @ddr_options: valuesandbuildflags
+ */
 
 #cmakedefine OMR_GC
 #cmakedefine OMR_JIT
@@ -229,5 +232,12 @@
  * This enables the option to select different algorithms for yielding.
  */
 #cmakedefine OMR_THR_YIELD_ALG
+
+/**
+ * This flags enables calls to omrsig_primary_signal, omrsig_primary_sigaction and
+ * omrsig_handler (omrsig library). If disabled, then calls to signal and sigaction
+ * will be enabled, and calls to functions in omrsig library will be disabled.
+ */
+#cmakedefine OMRPORT_OMRSIG_SUPPORT
 
 #endif /* !defined(OMRCFG_H_) */
