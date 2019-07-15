@@ -32,6 +32,11 @@ if(OMR_HOST_ARCH STREQUAL "ppc")
 
 	list(APPEND OMR_PLATFORM_CXX_COMPILE_OPTIONS -qlanglvl=extended0x)
 
+	if(NOT OMR_ENV_LITTLE_ENDIAN)
+		# add -qdebug=NETHUNK for BE platforms to C++ flags
+		list(APPEND OMR_PLATFORM_CXX_COMPILE_OPTIONS -qdebug=NETHUNK)
+	endif()
+
 	if(OMR_ENV_DATA64)
 		list(APPEND OMR_PLATFORM_COMPILE_OPTIONS
 			-q64

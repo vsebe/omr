@@ -183,6 +183,14 @@ ifeq (1,$(OMR_DEBUG))
   endif
 endif
 
+ifeq (ppc,$(OMR_HOST_ARCH))
+  ifeq (xlc,$(OMR_TOOLCHAIN))
+    ifeq ($(OMR_ENV_LITTLE_ENDIAN),0)
+      GLOBAL_CXXFLAGS+=-qdebug=NETHUNK
+    endif
+  endif
+endif
+
 #-- Add Platform flags
 ifeq (x86,$(OMR_HOST_ARCH))
     ifeq (1,$(OMR_ENV_DATA64))
