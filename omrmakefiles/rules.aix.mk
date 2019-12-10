@@ -51,6 +51,9 @@ ifeq (,$(findstring xlclang,$(notdir $(CC))))
 else
   # xlclang options
   GLOBAL_CFLAGS+=-qlanglvl=extended0x -qxlcompatmacros
+  # -qlanglvl=extended0x C++ only (remove?)
+  # C only: -qlanglvl=extc99 (default), should add it ???
+  #GLOBAL_CFLAGS+=-qxlcompatmacros
 endif
 
 ifeq (,$(findstring xlclang++,$(notdir $(CXX))))
@@ -58,7 +61,7 @@ ifeq (,$(findstring xlclang++,$(notdir $(CXX))))
   GLOBAL_CXXFLAGS+=-q mbcs -qinfo=pro
 else
   # xlclang++ options
-  GLOBAL_CXXFLAGS+=-qxlcompatmacros -fno-exceptions
+  GLOBAL_CXXFLAGS+=-qxlcompatmacros -qnoeh
   ifeq (0,$(OMR_RTTI))
     GLOBAL_CXXFLAGS+=-fno-rtti
   endif
@@ -98,6 +101,9 @@ ifneq (,$(findstring executable,$(ARTIFACT_TYPE)))
   endif
 
   GLOBAL_LDFLAGS+=-lm -lpthread -liconv -ldl
+
+  # debug only for xlclang
+  GLOBAL_LDFLAGS += -bnoquiet
 endif
 
 ###
