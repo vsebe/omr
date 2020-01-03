@@ -20,6 +20,10 @@
 # SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
 ###############################################################################
 
+ifeq (xlc,$(OMR_TOOLCHAIN))
+    XLC_VERSION := $(shell xlc -qversion | tail -n1 | awk '{print $$2}')
+endif
+
 ###
 ### Helpers
 ###
@@ -50,6 +54,13 @@ ifeq (gcc,$(OMR_TOOLCHAIN))
 endif
 ifeq (xlc,$(OMR_TOOLCHAIN))
     GLOBAL_CXXFLAGS+= -qlanglvl=extended0x
+    ifeq ($(OMR_ENV_LITTLE_ENDIAN),1)
+        ifneq (,$(findstring 16,$(XLC_VERSION)))
+            # should add -qlanglvl=extended to GLOBAL_CFLAGS?
+            GLOBAL_CFLAGS += -qxlcompatmacros
+            GLOBAL_CXXFLAGS += -qxlcompatmacros
+        endif
+    endif
 endif
 
 ifeq (s390,$(OMR_HOST_ARCH))
@@ -124,7 +135,13 @@ ifeq (ppc,$(OMR_HOST_ARCH))
         ifeq (1,$(OMR_ENV_DATA64))
             GLOBAL_ASFLAGS+=-q64
             ifeq ($(OMR_ENV_LITTLE_ENDIAN),1)
-                GLOBAL_ASFLAGS+=-qarch=pwr7
+                ifeq (,$(findstring 16,$(XLC_VERSION)))
+                    # xlc 13.1.1
+                    GLOBAL_ASFLAGS+=-qarch=pwr7
+                else
+                    # xlc 16.1.1
+                    GLOBAL_ASFLAGS+=-qarch=pwr8
+                endif
             else
                 GLOBAL_ASFLAGS+=-qarch=ppc64
             endif
@@ -235,8 +252,15 @@ else
                 GLOBAL_CXXFLAGS+=-qalias=noansi -qxflag=LTOL:LTOL0 -qxflag=selinux -qsuppress=1540-1087:1540-1088:1540-1090
                 ifeq (1,$(OMR_ENV_DATA64))
                     ifeq ($(OMR_ENV_LITTLE_ENDIAN),1)
-                        GLOBAL_CFLAGS+=-qarch=pwr7
-                        GLOBAL_CXXFLAGS+=-qarch=pwr7
+                        ifeq (,$(findstring 16,$(XLC_VERSION)))
+                            # xlc 13.1.1
+                            GLOBAL_CFLAGS+=-qarch=pwr7
+                            GLOBAL_CXXFLAGS+=-qarch=pwr7
+                        else
+                            # xlc 16.1.1
+                            GLOBAL_CFLAGS+=-qarch=pwr8
+                            GLOBAL_CXXFLAGS+=-qarch=pwr8
+                        endif
                     else
                         GLOBAL_CFLAGS+=-qarch=ppc64
                         GLOBAL_CXXFLAGS+=-qarch=ppc64
